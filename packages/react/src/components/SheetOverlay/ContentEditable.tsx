@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import _ from "lodash";
 
 type ContentEditableProps = Omit<
@@ -12,67 +12,74 @@ type ContentEditableProps = Omit<
   autoFocus?: boolean;
 };
 
-class ContentEditable extends React.Component<ContentEditableProps> {
-  lastHtml?: string = undefined;
+const ContentEditable = ({ ...props }: ContentEditableProps) => {
+  const [lastHtml, setLastHTML] = useState("");
+  let root: HTMLDivElement | null | unknown = useRef<HTMLDivElement | null>(
+    null
+  );
+  const { autoFocus, initialContent, onChange } = props;
 
-  root: HTMLDivElement | null = null;
-
-  componentDidMount() {
-    const { autoFocus, initialContent } = this.props;
-    if (autoFocus) {
-      this.root?.focus();
+  useEffect(() => {
+    if (autoFocus && root instanceof HTMLDivElement) {
+      root.focus();
     }
-    if (initialContent && this.root) {
-      this.root.innerHTML = initialContent;
+    if (initialContent && root instanceof HTMLDivElement) {
+      root.innerHTML = initialContent;
     }
-  }
+  }, [autoFocus, initialContent]);
 
-  UNSAFE_componentWillUpdate() {
-    const { initialContent } = this.props;
-    if (initialContent && this.root) {
-      this.root.innerHTML = initialContent;
+  const isFirstRender = useRef(true);
+
+  // UNSAFE_componentWillUpdate
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      if (initialContent && root instanceof HTMLDivElement) {
+        root.innerHTML = initialContent;
+      }
     }
-  }
+  });
 
-  emitChange() {
-    const { onChange } = this.props;
-    const html = this.root?.innerHTML;
-    if (onChange && html !== this.lastHtml) {
+  const fnEmitChange = useCallback(() => {
+    let html;
+
+    if (root instanceof HTMLDivElement) {
+      html = root.innerHTML;
+    }
+    if (onChange && html !== lastHtml) {
       onChange(html || "");
     }
-    this.lastHtml = html;
-  }
+    setLastHTML(html || "");
+  }, [root, lastHtml, onChange]);
 
-  render() {
-    const { innerRef, onBlur } = this.props;
-    return (
-      <div
-        onMouseDown={(e) => e.stopPropagation()}
-        onDoubleClick={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-        {..._.omit(
-          this.props,
-          "innerRef",
-          "onChange",
-          "html",
-          "onBlur",
-          "autoFocus",
-          "initialContent"
-        )}
-        ref={(e) => {
-          this.root = e;
-          innerRef?.(e);
-        }}
-        tabIndex={0}
-        onInput={this.emitChange.bind(this)}
-        onBlur={(e) => {
-          this.emitChange.bind(this)();
-          onBlur?.(e);
-        }}
-        contentEditable
-      />
-    );
-  }
-}
+  const { innerRef, onBlur } = props;
+  return (
+    <div
+      onMouseDown={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      {..._.omit(
+        props,
+        "innerRef",
+        "onChange",
+        "html",
+        "onBlur",
+        "autoFocus",
+        "initialContent"
+      )}
+      ref={(e) => {
+        root = e;
+        innerRef?.(e);
+      }}
+      tabIndex={0}
+      onInput={fnEmitChange}
+      onBlur={(e) => {
+        fnEmitChange();
+        onBlur?.(e);
+      }}
+      contentEditable
+    />
+  );
+};
 
 export default ContentEditable;
