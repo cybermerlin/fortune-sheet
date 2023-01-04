@@ -245,7 +245,11 @@ const Toolbar: React.FC<{
       if (name === "font-size") {
         return (
           <Combo
-            text={cell ? normalizedCellAttr(cell, "fs") : "10"}
+            text={
+              cell
+                ? normalizedCellAttr(cell, "fs", context.defaultFontSize)
+                : context.defaultFontSize.toString()
+            }
             key={name}
             tooltip={tooltip}
           >
@@ -436,6 +440,7 @@ const Toolbar: React.FC<{
             tooltip={tooltip}
             key={name}
             onClick={() => {
+              if (context.allowEdit === false) return;
               if (_.isUndefined(context.luckysheet_select_save)) {
                 showDialog(splitText.tipNoSelect, "ok");
               } else {
@@ -646,7 +651,10 @@ const Toolbar: React.FC<{
             iconId={name}
             tooltip={toolbar.insertImage}
             key={name}
-            onClick={() => showImgChooser()}
+            onClick={() => {
+              if (context.allowEdit === false) return;
+              showImgChooser();
+            }}
           >
             <input
               id="fortune-img-upload"
@@ -1217,6 +1225,8 @@ const Toolbar: React.FC<{
       splitText,
       findAndReplace,
       context.luckysheet_select_save,
+      context.defaultFontSize,
+      context.allowEdit,
     ]
   );
 

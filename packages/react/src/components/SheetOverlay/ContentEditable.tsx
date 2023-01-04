@@ -10,6 +10,7 @@ type ContentEditableProps = Omit<
   onChange?: (html: string) => void;
   onBlur?: (e: React.FocusEvent<HTMLDivElement, Element>) => void;
   autoFocus?: boolean;
+  allowEdit?: boolean;
 };
 
 const ContentEditable = ({ ...props }: ContentEditableProps) => {
@@ -53,6 +54,9 @@ const ContentEditable = ({ ...props }: ContentEditableProps) => {
   }, [root, lastHtml, onChange]);
 
   const { innerRef, onBlur } = props;
+  let { allowEdit } = props;
+  if (_.isNil(allowEdit)) allowEdit = true;
+
   return (
     <div
       onMouseDown={(e) => e.stopPropagation()}
@@ -65,6 +69,7 @@ const ContentEditable = ({ ...props }: ContentEditableProps) => {
         "html",
         "onBlur",
         "autoFocus",
+        "allowEdit",
         "initialContent"
       )}
       ref={(e) => {
@@ -77,7 +82,7 @@ const ContentEditable = ({ ...props }: ContentEditableProps) => {
         fnEmitChange();
         onBlur?.(e);
       }}
-      contentEditable
+      contentEditable={allowEdit}
     />
   );
 };

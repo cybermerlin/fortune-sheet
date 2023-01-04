@@ -143,11 +143,13 @@ const NotationBoxes: React.FC = () => {
                     wordBreak: "break-all",
                     outline: "none",
                   }}
+                  allowEdit={context.allowEdit}
                   spellCheck={false}
                   data-r={r}
                   data-c={c}
                   onKeyDown={(e) => e.stopPropagation()}
                   onFocus={(e) => {
+                    if (context.allowEdit === false) return;
                     refs.globalCache.editingCommentBoxEle =
                       e.target as HTMLDivElement;
                   }}
