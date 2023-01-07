@@ -23,6 +23,7 @@ module.exports = {
     quotes: 0,
     camelcase: 0,
     "class-methods-use-this": 0,
+    "eol-last": ["error", "always"],
     "no-continue": 0,
     "no-param-reassign": 0,
     "no-unused-vars": 0,
