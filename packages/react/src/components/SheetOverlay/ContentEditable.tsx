@@ -13,12 +13,11 @@ type ContentEditableProps = Omit<
   allowEdit?: boolean;
 };
 
-const ContentEditable = ({ ...props }: ContentEditableProps) => {
+const ContentEditable: React.FC<ContentEditableProps> = ({ ...props }) => {
   const [lastHtml, setLastHTML] = useState("");
-  let root: HTMLDivElement | null | unknown = useRef<HTMLDivElement | null>(
-    null
-  );
+  const root = useRef<HTMLDivElement | null>(null);
   const { autoFocus, initialContent, onChange } = props;
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
     if (autoFocus && root instanceof HTMLDivElement) {
@@ -27,9 +26,7 @@ const ContentEditable = ({ ...props }: ContentEditableProps) => {
     if (initialContent && root instanceof HTMLDivElement) {
       root.innerHTML = initialContent;
     }
-  }, [autoFocus, initialContent]);
-
-  const isFirstRender = useRef(true);
+  }, [autoFocus]);
 
   // UNSAFE_componentWillUpdate
   useEffect(() => {
@@ -39,7 +36,7 @@ const ContentEditable = ({ ...props }: ContentEditableProps) => {
         root.innerHTML = initialContent;
       }
     }
-  });
+  }, [initialContent]);
 
   const fnEmitChange = useCallback(() => {
     let html;
@@ -73,7 +70,7 @@ const ContentEditable = ({ ...props }: ContentEditableProps) => {
         "initialContent"
       )}
       ref={(e) => {
-        root = e;
+        root.current = e;
         innerRef?.(e);
       }}
       tabIndex={0}
