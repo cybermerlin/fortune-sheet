@@ -8,7 +8,7 @@
   "repository": "https://github.com/ruilisi/fortune-sheet",
   "license": "MIT",
   "scripts": {
-    "dev": "yarn storybook",
+    "dev": "npx yarn storybook",
     "build": "node ./scripts/build",
     "storybook": "start-storybook -p 6006",
     "build-storybook": "build-storybook",
@@ -66,7 +66,7 @@
     "typescript": "^4.9.4"
   },
   "gitHooks": {
-    "pre-commit": "yarn lint"
+    "pre-commit": "npx yarn lint"
   },
   "resolutions": {
     "react": "^18.2.0",
