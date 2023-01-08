@@ -20,11 +20,11 @@ const ContentEditable: React.FC<ContentEditableProps> = ({ ...props }) => {
   const isFirstRender = useRef(true);
 
   useEffect(() => {
-    if (autoFocus && root instanceof HTMLDivElement) {
-      root.focus();
+    if (autoFocus && root.current instanceof HTMLDivElement) {
+      root.current.focus();
     }
-    if (initialContent && root instanceof HTMLDivElement) {
-      root.innerHTML = initialContent;
+    if (initialContent && root.current instanceof HTMLDivElement) {
+      root.current.innerHTML = initialContent;
     }
   }, [autoFocus]);
 
@@ -32,8 +32,8 @@ const ContentEditable: React.FC<ContentEditableProps> = ({ ...props }) => {
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
-      if (initialContent && root instanceof HTMLDivElement) {
-        root.innerHTML = initialContent;
+      if (initialContent && root.current instanceof HTMLDivElement) {
+        root.current.innerHTML = initialContent;
       }
     }
   }, [initialContent]);
@@ -41,8 +41,8 @@ const ContentEditable: React.FC<ContentEditableProps> = ({ ...props }) => {
   const fnEmitChange = useCallback(() => {
     let html;
 
-    if (root instanceof HTMLDivElement) {
-      html = root.innerHTML;
+    if (root.current instanceof HTMLDivElement) {
+      html = root.current.innerHTML;
     }
     if (onChange && html !== lastHtml) {
       onChange(html || "");
