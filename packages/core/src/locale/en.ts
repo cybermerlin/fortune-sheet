@@ -1,4 +1,9 @@
 export default {
+  generalDialog: {
+    partiallyError: "Cannot perform this operation on partially merged cells",
+    readOnlyError: "Cannot perform this operation in read-only mode",
+    dataNullError: "Cannot perform this operation on data that does not exist",
+  },
   functionlist: [
     {
       n: "SUMIF",
@@ -11493,6 +11498,8 @@ export default {
     byRow: "By row",
     byCol: "By column",
     generateNewMatrix: "Generate new matrix",
+    noMulti:
+      "Cannot perform this operation on multiple selection areas, please select a single area",
   },
   comment: {
     insert: "Insert",

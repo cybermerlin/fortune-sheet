@@ -1,4 +1,10 @@
 export default {
+  generalDialog: {
+    partiallyError:
+      "No se puede realizar esta operación en celdas parcialmente unidas",
+    readOnlyError: "No se puede realizar esto en modo de solo lectura",
+    dataNullError: "No se puede hacer esto con datos que no existen",
+  },
   functionlist: [
     {
       n: "SUMIF",
@@ -11467,6 +11473,8 @@ export default {
     byRow: "Por fila",
     byCol: "Por columna",
     generateNewMatrix: "Generar nueva matriz",
+    noMulti:
+      "No se puede realizar esta operación en varias áreas de selección, selecciona una sola área",
   },
   comment: {
     insert: "Insertar",

@@ -53,16 +53,19 @@ const SheetOverlay: React.FC = () => {
   const cellAreaMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
       const { nativeEvent } = e;
-      setContext((draftCtx) => {
-        handleCellAreaMouseDown(
-          draftCtx,
-          refs.globalCache,
-          nativeEvent,
-          refs.cellInput.current!,
-          refs.cellArea.current!,
-          refs.fxInput.current!
-        );
-      });
+      if (e.button !== 2) {
+        // onContextMenu event will not call onMouseDown
+        setContext((draftCtx) => {
+          handleCellAreaMouseDown(
+            draftCtx,
+            refs.globalCache,
+            nativeEvent,
+            refs.cellInput.current!,
+            refs.cellArea.current!,
+            refs.fxInput.current!
+          );
+        });
+      }
     },
     [refs.cellArea, refs.cellInput, refs.globalCache, refs.fxInput, setContext]
   );
@@ -265,7 +268,13 @@ const SheetOverlay: React.FC = () => {
   useEffect(() => {
     refs.cellArea.current!.scrollLeft = context.scrollLeft;
     refs.cellArea.current!.scrollTop = context.scrollTop;
-  }, [context.scrollLeft, context.scrollTop, refs.cellArea]);
+  }, [
+    context.scrollLeft,
+    context.scrollTop,
+    refs.cellArea,
+    refs.cellArea.current?.scrollLeft,
+    refs.cellArea.current?.scrollTop,
+  ]);
 
   useEffect(() => {
     // ensure cell input is always focused to accept first key stroke on cell
@@ -662,6 +671,16 @@ const SheetOverlay: React.FC = () => {
                   <span style={{ fontSize: 14 }}>{info.row}</span>{" "}
                   <span style={{ fontSize: 14, color: "#9c9c9c" }}>
                     ({info.addLast})
+                  </span>
+                  <span
+                    className="fortune-add-row-button"
+                    onClick={() => {
+                      setContext((ctx) => {
+                        ctx.scrollTop = 0;
+                      });
+                    }}
+                  >
+                    {info.backTop}
                   </span>
                 </div>
               </div>

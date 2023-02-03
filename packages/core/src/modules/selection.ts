@@ -4,6 +4,7 @@ import { Context, getFlowdata } from "../context";
 import {
   getCellValue,
   getdatabyselection,
+  getDataBySelectionNoCopy,
   getStyleByCell,
   mergeBorder,
 } from "./cell";
@@ -13,6 +14,8 @@ import { getBorderInfoCompute } from "./border";
 import { getSheetIndex, replaceHtml } from "../utils";
 import { hasPartMC } from "./validation";
 import { update } from "./format";
+// @ts-ignore
+import SSF from "./ssf";
 
 export const selectionCache = {
   isPasteAction: false,
@@ -1500,7 +1503,7 @@ export function copy(ctx: Context) {
   }
 }
 
-export function deleteSelectedCellText(ctx: Context) {
+export function deleteSelectedCellText(ctx: Context): string {
   // if (
   //   !checkProtectionLockedRangeList(
   //     ctx.luckysheet_select_save,
@@ -1514,13 +1517,13 @@ export function deleteSelectedCellText(ctx: Context) {
   // luckysheetContainerFocus();
 
   if (ctx.allowEdit === false) {
-    return;
+    return "allowEdit";
   }
 
   const selection = ctx.luckysheet_select_save;
   if (selection && !_.isEmpty(selection)) {
     const d = getFlowdata(ctx);
-    if (!d) return;
+    if (!d) return "dataNullError";
 
     let has_PartMC = false;
 
@@ -1535,7 +1538,6 @@ export function deleteSelectedCellText(ctx: Context) {
         break;
       }
     }
-
     if (has_PartMC) {
       // const locale_drag = locale().drag;
 
@@ -1545,7 +1547,7 @@ export function deleteSelectedCellText(ctx: Context) {
       //   tooltip.info(locale_drag.noPartMerge, "");
       // }
 
-      return;
+      return "partMC";
     }
     const hyperlinkMap =
       ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!].hyperlink;
@@ -1587,13 +1589,13 @@ export function deleteSelectedCellText(ctx: Context) {
         }
       }
     }
-
     // jfrefreshgrid(d, ctx.luckysheet_select_save);
 
     // // 清空编辑框的内容
     // // 备注：在functionInputHanddler方法中会把该标签的内容拷贝到 #luckysheet-functionbox-cell
     // $("#luckysheet-rich-text-editor").html("");
   }
+  return "success";
 }
 
 // 选区是否重叠
@@ -1762,4 +1764,39 @@ export function getSelectionStyle(
     ret.display = "none";
   }
   return ret;
+}
+
+export function calcSelectionInfo(ctx: Context) {
+  const selection = ctx.luckysheet_select_save!;
+  let numberC = 0;
+  let count = 0;
+  let sum = 0;
+  let max = -Infinity;
+  let min = Infinity;
+  for (let s = 0; s < selection.length; s += 1) {
+    const data = getDataBySelectionNoCopy(ctx, selection[s]);
+    for (let r = 0; r < data.length; r += 1) {
+      for (let c = 0; c < data[0].length; c += 1) {
+        // 防止选区长度超出data
+        if (r >= data.length || c >= data[0].length) break;
+        const value = data![r][c]?.m as string;
+        // 判断是不是数字
+        if (parseFloat(value).toString() !== "NaN") {
+          const valueNumber = parseFloat(value);
+          count += 1;
+          sum += valueNumber;
+          max = Math.max(valueNumber, max);
+          min = Math.min(valueNumber, min);
+          numberC += 1;
+        } else if (value != null) {
+          count += 1;
+        }
+      }
+    }
+  }
+  const average: string = SSF.format("w0.00", sum / numberC);
+  sum = SSF.format("w0.00", sum);
+  max = SSF.format("w0.00", max);
+  min = SSF.format("w0.00", min);
+  return { numberC, count, sum, max, min, average };
 }
