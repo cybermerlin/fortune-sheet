@@ -5,8 +5,11 @@
   margin: 0;
   padding: 0;
   flex-direction: column;
-  font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
+  font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC",
+    "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei", "WenQuanYi Micro Hei",
+    sans-serif;
   background-color: white;
+  position: relative;
 }
 
 .fortune-workarea {
@@ -17,7 +20,8 @@
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 1003; /* should below .fortune-context-menu */
+  z-index: 1003;
+  /* should below .fortune-context-menu */
   height: 100%;
   width: 100%;
 }
@@ -27,4 +31,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+html::-webkit-scrollbar-button {
+  display: none;
+}
+
+.fortune-stat-area {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
 }

@@ -41,13 +41,18 @@ import "./index.css";
 import Button from "./Button";
 import Divider, { MenuDivider } from "./Divider";
 import Combo from "./Combo";
-import ColorPicker from "./ColorPicker";
 import Select, { Option } from "./Select";
 import SVGIcon from "../SVGIcon";
 import { useDialog } from "../../hooks/useDialog";
 import { FormulaSearch } from "../FormulaSearch";
 import { SplitColumn } from "../SplitColumn";
 import { LocationCondition } from "../LocationCondition";
+import DataVerification from "../DataVerification";
+import ConditionalFormat from "../ConditionFormat";
+import CustomButton from "./CustomButton";
+import { CustomColor } from "./CustomColor";
+import CustomBorder from "./CustomBorder";
+import { FormatSearch } from "../FormatSearch";
 
 const Toolbar: React.FC<{
   setMoreItems: React.Dispatch<React.SetStateAction<React.ReactNode>>;
@@ -86,12 +91,73 @@ const Toolbar: React.FC<{
     comment,
     fontarray,
   } = locale(context);
+  const toolbarFormat = locale(context).format;
   const sheetWidth = context.luckysheetTableContentHW[0];
+
+  const [customColor, setcustomColor] = useState("#000000");
+  const [customStyle, setcustomStyle] = useState("1");
+
+  const showSubMenu = useCallback(
+    (e: React.MouseEvent<HTMLDivElement, MouseEvent>, className: string) => {
+      const target = e.target as HTMLDivElement;
+      const menuItem =
+        target.className === "fortune-toolbar-menu-line"
+          ? target.parentElement!
+          : target;
+      const menuItemRect = menuItem.getBoundingClientRect();
+      const workbookContainerRect =
+        refs.workbookContainer.current!.getBoundingClientRect();
+      const subMenu = menuItem.querySelector(`.${className}`) as HTMLDivElement;
+      if (_.isNil(subMenu)) return;
+      const menuItemStyle = window.getComputedStyle(menuItem);
+      const menuItemPaddingRight = parseFloat(
+        menuItemStyle.getPropertyValue("padding-right").replace("px", "")
+      );
+
+      if (
+        workbookContainerRect.right - menuItemRect.right <
+        parseFloat(subMenu.style.width.replace("px", ""))
+      ) {
+        subMenu.style.display = "block";
+        subMenu.style.right = `${menuItemRect.width - menuItemPaddingRight}px`;
+      } else {
+        subMenu.style.display = "block";
+        subMenu.style.right =
+          className === "more-format"
+            ? `${-(parseFloat(subMenu.style.width.replace("px", "")) + 0)}px`
+            : `${-(
+                parseFloat(subMenu.style.width.replace("px", "")) +
+                menuItemPaddingRight
+              )}px`;
+      }
+    },
+    [refs.workbookContainer]
+  );
+
+  const hideSubMenu = useCallback(
+    (e: React.MouseEvent<HTMLDivElement, MouseEvent>, className: string) => {
+      const target = e.target as HTMLDivElement;
+
+      if (target.className === `${className}`) {
+        target.style.display = "none";
+        return;
+      }
+
+      const subMenu = (
+        target.className === "condition-format-item"
+          ? target.parentElement
+          : target.querySelector(`.${className}`)
+      ) as HTMLDivElement;
+      if (_.isNil(subMenu)) return;
+      subMenu.style.display = "none";
+    },
+    []
+  );
 
   // rerenders the entire toolbar and trigger recalculation of item locations
   useEffect(() => {
     setToolbarWrapIndex(-1);
-  }, [settings.toolbarItems]);
+  }, [settings.toolbarItems, settings.customToolbarItems]);
 
   // recalculate item locations
   useEffect(() => {
@@ -120,14 +186,16 @@ const Toolbar: React.FC<{
     for (let i = itemLocations.length - 1; i >= 0; i -= 1) {
       const loc = itemLocations[i];
       if (loc + moreButtonWidth < container.clientWidth) {
-        setToolbarWrapIndex(i);
+        setToolbarWrapIndex(
+          i - itemLocations.length + settings.toolbarItems.length
+        );
         if (i === itemLocations.length - 1) {
           setMoreItems(null);
         }
         break;
       }
     }
-  }, [itemLocations, setMoreItems, sheetWidth]);
+  }, [itemLocations, setMoreItems, settings.toolbarItems.length, sheetWidth]);
 
   const getToolbarItem = useCallback(
     (name: string, i: number) => {
@@ -137,12 +205,12 @@ const Toolbar: React.FC<{
         return <Divider key={i} />;
       }
       if (["font-color", "background"].includes(name)) {
-        const pick = (color: string) => {
+        const pick = (color: string | undefined) => {
           setContext((draftCtx) =>
             (name === "font-color" ? handleTextColor : handleTextBackground)(
               draftCtx,
               refs.cellInput.current!,
-              color
+              color as string
             )
           );
           if (name === "font-color") {
@@ -179,11 +247,12 @@ const Toolbar: React.FC<{
               }}
             >
               {(setOpen) => (
-                <ColorPicker
-                  onPick={(color) => {
+                <CustomColor
+                  onCustomPick={(color) => {
                     pick(color);
                     setOpen(false);
                   }}
+                  onColorPick={pick}
                 />
               )}
             </Combo>
@@ -207,38 +276,85 @@ const Toolbar: React.FC<{
           <Combo text={currentFmt} key={name} tooltip={tooltip}>
             {(setOpen) => (
               <Select>
-                {defaultFmt
-                  .slice(0, defaultFmt.length - 2)
-                  .map(({ text, value, example }, ii) =>
-                    value !== "split" ? (
+                {defaultFmt.map(({ text, value, example }, ii) => {
+                  if (value === "split") {
+                    return <MenuDivider key={ii} />;
+                  }
+                  if (value === "fmtOtherSelf") {
+                    return (
                       <Option
                         key={value}
-                        onClick={() => {
-                          setOpen(false);
-                          setContext((ctx) => {
-                            const d = getFlowdata(ctx);
-                            if (d == null) return;
-                            updateFormat(
-                              ctx,
-                              refs.cellInput.current!,
-                              d,
-                              "ct",
-                              value
-                            );
-                          });
-                        }}
+                        onMouseEnter={(e) => showSubMenu(e, "more-format")}
+                        onMouseLeave={(e) => hideSubMenu(e, "more-format")}
                       >
                         <div className="fortune-toolbar-menu-line">
                           <div>{text}</div>
-                          <div className="fortune-toolbar-subtext">
-                            {example}
-                          </div>
+                          <SVGIcon name="rightArrow" width={14} />
+                        </div>
+                        <div
+                          className="more-format toolbar-item-sub-menu fortune-toolbar-select"
+                          style={{
+                            display: "none",
+                            width: 150,
+                            bottom: 10,
+                            top: undefined,
+                          }}
+                        >
+                          {[
+                            {
+                              text: toolbarFormat.moreCurrency,
+                              onclick: () => {
+                                showDialog(
+                                  <FormatSearch
+                                    onCancel={hideDialog}
+                                    type="currency"
+                                  />
+                                );
+                                setOpen(false);
+                              },
+                            },
+                          ].map((v) => (
+                            <div
+                              className="set-background-item fortune-toolbar-select-option"
+                              key={v.text}
+                              onClick={() => {
+                                v.onclick();
+                                setOpen(false);
+                              }}
+                              tabIndex={0}
+                            >
+                              {v.text}
+                            </div>
+                          ))}
                         </div>
                       </Option>
-                    ) : (
-                      <MenuDivider key={ii} />
-                    )
-                  )}
+                    );
+                  }
+                  return (
+                    <Option
+                      key={value}
+                      onClick={() => {
+                        setOpen(false);
+                        setContext((ctx) => {
+                          const d = getFlowdata(ctx);
+                          if (d == null) return;
+                          updateFormat(
+                            ctx,
+                            refs.cellInput.current!,
+                            d,
+                            "ct",
+                            value
+                          );
+                        });
+                      }}
+                    >
+                      <div className="fortune-toolbar-menu-line">
+                        <div>{text}</div>
+                        <div className="fortune-toolbar-subtext">{example}</div>
+                      </div>
+                    </Option>
+                  );
+                })}
               </Select>
             )}
           </Combo>
@@ -301,7 +417,8 @@ const Toolbar: React.FC<{
                         handleTextSize(
                           draftContext,
                           refs.cellInput.current!,
-                          num
+                          num,
+                          refs.canvas.current!.getContext("2d")!
                         )
                       );
                       setOpen(false);
@@ -496,6 +613,19 @@ const Toolbar: React.FC<{
           />
         );
       }
+      if (name === "dataVerification") {
+        return (
+          <Button
+            iconId={name}
+            tooltip={tooltip}
+            key={name}
+            onClick={() => {
+              if (context.allowEdit === false) return;
+              showDialog(<DataVerification />);
+            }}
+          />
+        );
+      }
       if (name === "locationCondition") {
         const items = [
           {
@@ -685,6 +815,28 @@ const Toolbar: React.FC<{
           </Combo>
         );
       }
+      if (name === "conditionFormat") {
+        const items = [
+          "highlightCellRules",
+          "itemSelectionRules",
+          // "dataBar",
+          // "colorGradation",
+          // "icons",
+          "-",
+          // "newFormatRule",
+          "deleteRule",
+          // "manageRules",
+        ];
+        return (
+          <Combo
+            iconId="conditionFormat"
+            key={name}
+            tooltip={toolbar.conditionalFormat}
+          >
+            {(setOpen) => <ConditionalFormat items={items} setOpen={setOpen} />}
+          </Combo>
+        );
+      }
       if (name === "image") {
         return (
           <Button
@@ -811,7 +963,12 @@ const Toolbar: React.FC<{
             tooltip={toolbar.autoSum}
             onClick={() =>
               setContext((ctx) => {
-                handleSum(ctx, refs.cellInput.current!, refs.globalCache!);
+                handleSum(
+                  ctx,
+                  refs.cellInput.current!,
+                  refs.fxInput.current,
+                  refs.globalCache!
+                );
               })
             }
           >
@@ -825,6 +982,7 @@ const Toolbar: React.FC<{
                         autoSelectionFormula(
                           ctx,
                           refs.cellInput.current!,
+                          refs.fxInput.current,
                           value,
                           refs.globalCache
                         );
@@ -941,6 +1099,7 @@ const Toolbar: React.FC<{
             text: border.borderSlash,
             value: "border-slash",
           },
+          { text: "", value: "divider" },
         ];
         return (
           <Combo
@@ -950,7 +1109,7 @@ const Toolbar: React.FC<{
             text="边框设置"
             onClick={() =>
               setContext((ctx) => {
-                handleBorder(ctx, "border-all");
+                handleBorder(ctx, "border-all", customColor, customStyle);
               })
             }
           >
@@ -962,7 +1121,7 @@ const Toolbar: React.FC<{
                       key={value}
                       onClick={() => {
                         setContext((ctx) => {
-                          handleBorder(ctx, value);
+                          handleBorder(ctx, value, customColor, customStyle);
                         });
                         setOpen(false);
                       }}
@@ -976,6 +1135,12 @@ const Toolbar: React.FC<{
                     <MenuDivider key={ii} />
                   )
                 )}
+                <CustomBorder
+                  onPick={(color, style) => {
+                    setcustomColor(color as string);
+                    setcustomStyle(style as string);
+                  }}
+                />
               </Select>
             )}
           </Combo>
@@ -1249,6 +1414,7 @@ const Toolbar: React.FC<{
       cell,
       setContext,
       refs.cellInput,
+      refs.fxInput,
       refs.globalCache,
       defaultFmt,
       align,
@@ -1273,11 +1439,37 @@ const Toolbar: React.FC<{
       context.allowEdit,
       comment,
       fontarray,
+      hideSubMenu,
+      showSubMenu,
+      refs.canvas,
+      customColor,
+      customStyle,
+      toolbarFormat.moreCurrency,
     ]
   );
 
   return (
-    <div ref={containerRef} className="fortune-toolbar">
+    <div
+      ref={containerRef}
+      className="fortune-toolbar"
+      aria-label={toolbar.toolbar}
+    >
+      {settings.customToolbarItems.map((n) => {
+        return (
+          <CustomButton
+            tooltip={n.tooltip}
+            onClick={n.onClick}
+            key={n.key}
+            icon={n.icon}
+            iconName={n.iconName}
+          >
+            {n.children}
+          </CustomButton>
+        );
+      })}
+      {settings.customToolbarItems?.length > 0 ? (
+        <Divider key="customDivider" />
+      ) : null}
       {(toolbarWrapIndex === -1
         ? settings.toolbarItems
         : settings.toolbarItems.slice(0, toolbarWrapIndex + 1)

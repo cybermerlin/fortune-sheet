@@ -1,17 +1,19 @@
 import React, { useState, useCallback } from "react";
-import { ComponentMeta, ComponentStory } from "@storybook/react";
+import { Meta, StoryFn } from "@storybook/react";
 import { Sheet } from "@fortune-sheet/core";
 import { Workbook } from "@fortune-sheet/react";
 import cell from "./data/cell";
 import formula from "./data/formula";
 import empty from "./data/empty";
 import freeze from "./data/freeze";
+import dataVerification from "./data/dataVerification";
+import lockcellData from "./data/protected";
 
 export default {
   component: Workbook,
-} as ComponentMeta<typeof Workbook>;
+} as Meta<typeof Workbook>;
 
-const Template: ComponentStory<typeof Workbook> = ({
+const Template: StoryFn<typeof Workbook> = ({
   // eslint-disable-next-line react/prop-types
   data: data0,
   ...args
@@ -21,7 +23,7 @@ const Template: ComponentStory<typeof Workbook> = ({
     setData(d);
   }, []);
   return (
-    <div style={{ width: "100%", height: "100%" }}>
+    <div style={{ width: "100%", height: "100vh" }}>
       <Workbook {...args} data={data} onChange={onChange} />
     </div>
   );
@@ -46,7 +48,17 @@ export const Freeze = Template.bind({});
 // @ts-ignore
 Freeze.args = { data: [freeze] };
 
-export const MultiInstance: ComponentStory<typeof Workbook> = () => {
+export const DataVerification = Template.bind({});
+// @ts-ignore
+DataVerification.args = { data: [dataVerification] };
+
+export const ProtectedSheet = Template.bind({});
+// @ts-ignore
+ProtectedSheet.args = {
+  data: lockcellData,
+};
+
+export const MultiInstance: StoryFn<typeof Workbook> = () => {
   return (
     <div
       style={{

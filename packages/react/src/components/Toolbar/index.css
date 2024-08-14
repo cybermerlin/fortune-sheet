@@ -16,11 +16,14 @@
   background-color: #e0e0e0;
   flex-shrink: 0;
 }
+
 .fortune-toolbar-menu-line {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  position: relative;
 }
+
 .fortune-toolbar-menu-divider {
   width: "100%";
   height: 1px;
@@ -80,7 +83,11 @@
   white-space: nowrap;
   top: 32px;
   left: 0;
-  z-index: 1002;
+  z-index: 1004;
+}
+
+.fortune-toolbar-select::-webkit-scrollbar {
+  display: none;
 }
 
 .fortune-toolbar-select,
@@ -94,6 +101,8 @@
 .fortune-toolbar-select {
   padding-left: 0;
   padding-right: 0;
+  overflow: auto;
+  max-height: 75vh;
 }
 
 .fortune-toolbar-combo-button {
@@ -110,6 +119,10 @@
 
 .fortune-toolbar-select-option:hover {
   background: #efefef;
+}
+
+.fortune-toolbar-select::-webkit-scrollbar {
+  display: none;
 }
 
 .fortune-toolbar-color-picker-row {
@@ -137,7 +150,7 @@
   padding: 6px;
   font-size: 12px;
   position: absolute;
-  z-index: 1;
+  z-index: 25; /* higher than toolbar tips */
   top: 40px;
   white-space: nowrap;
 }
@@ -172,10 +185,124 @@
   padding-top: 1px;
   padding-left: 24px;
   text-align: right;
-  opacity: .5;
+  opacity: 0.5;
   filter: alpha(opacity=50);
   color: #000;
   user-select: none;
   font-family: Arial;
   line-height: 100%;
+}
+
+.toolbar-item-sub-menu {
+  position: absolute;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 20%);
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  cursor: default;
+  font-size: 12px;
+  z-index: 1004;
+  box-sizing: border-box;
+  user-select: none;
+  outline: none;
+  border-radius: 6px;
+}
+
+#fortune-custom-color {
+  min-width: 164px;
+  background: rgb(240, 240, 240);
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 20%);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  font-size: 12px;
+}
+
+#fortune-custom-color .color-reset {
+  position: relative;
+  color: #333;
+  cursor: pointer;
+  list-style: none;
+  padding: 10px;
+  white-space: nowrap;
+  padding-left: 8px;
+  vertical-align: middle;
+  padding-right: 24px;
+  user-select: none;
+  border-radius: 6px;
+  background: white;
+}
+
+#fortune-custom-color .color-reset:hover {
+  background: rgb(230, 230, 230);
+}
+
+#fortune-custom-color .custom-color {
+  position: relative;
+  margin: auto;
+  padding: 10px;
+  border-radius: 6px;
+  background: white;
+  display: flex;
+  align-items: center;
+  margin: 1px 0px;
+  display: flex;
+  justify-content: space-around;
+}
+
+.button-basic {
+  display: inline-block;
+  margin-bottom: 0;
+  font-weight: 400;
+  text-align: center;
+  vertical-align: middle;
+  touch-action: manipulation;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1.42857143;
+  border-radius: 2px;
+  user-select: none;
+}
+
+.button-primary {
+  background: #0188fb;
+  border: 1px solid #0188fb;
+  color: #fff;
+  margin-right: -4px;
+}
+
+.fortune-border-select-menu {
+  position: absolute;
+  bottom: 0px;
+}
+
+.fortune-border-color-preview {
+  height: 3px;
+}
+
+.fortune-border-select-option {
+  font-size: 12px;
+  height: 24px;
+  line-height: 24px;
+  min-width: 60px;
+  padding: 8px 12px;
+}
+
+.fortune-border-select-option:hover {
+  background: #efefef;
+  cursor: pointer;
+}
+
+.fortune-border-style-preview {
+  height: 3px;
+  overflow: hidden;
+}
+
+.fortune-border-style-picker-menu {
+  padding: 0px 10px;
+}
+
+.fortune-border-style-picker-menu:hover {
+  background: #efefef;
+  cursor: pointer;
 }

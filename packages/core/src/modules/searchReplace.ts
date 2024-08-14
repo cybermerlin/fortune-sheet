@@ -3,7 +3,13 @@ import _ from "lodash";
 import { Context, getFlowdata } from "../context";
 import { locale } from "../locale";
 import { CellMatrix, Selection, SearchResult, GlobalCache } from "../types";
-import { chatatABC, getRegExpStr, getSheetIndex, replaceHtml } from "../utils";
+import {
+  chatatABC,
+  getRegExpStr,
+  getSheetIndex,
+  isAllowEdit,
+  replaceHtml,
+} from "../utils";
 import { setCellValue } from "./cell";
 import { valueShowEs } from "./format";
 import { normalizeSelection, scrollToHighlightCell } from "./selection";
@@ -338,7 +344,7 @@ export function onSearchDialogMoveStart(
   e: MouseEvent,
   container: HTMLDivElement
 ) {
-  const box = document.getElementById("fortunesheet-search-replace");
+  const box = document.getElementById("fortune-search-replace");
   if (!box) return;
   // eslint-disable-next-line prefer-const
   let { top, left, width, height } = box.getBoundingClientRect();
@@ -359,7 +365,7 @@ export function onSearchDialogMove(globalCache: GlobalCache, e: MouseEvent) {
   const searchDialog = globalCache?.searchDialog;
   const moveProps = searchDialog?.moveProps;
   if (moveProps == null) return;
-  const dialog = document.getElementById("fortunesheet-search-replace");
+  const dialog = document.getElementById("fortune-search-replace");
   const { x: startX, y: startY } = moveProps.cursorMoveStartPosition!;
   let { top, left } = moveProps.initialPosition!;
   left += e.pageX - startX;
@@ -384,7 +390,8 @@ export function replace(
   }
 ) {
   const { findAndReplace } = locale(ctx);
-  if (!ctx.allowEdit) {
+  const allowEdit = isAllowEdit(ctx);
+  if (!allowEdit) {
     return findAndReplace.modeTip;
   }
 
@@ -502,7 +509,8 @@ export function replaceAll(
   }
 ) {
   const { findAndReplace } = locale(ctx);
-  if (!ctx.allowEdit) {
+  const allowEdit = isAllowEdit(ctx);
+  if (!allowEdit) {
     return findAndReplace.modeTip;
   }
 

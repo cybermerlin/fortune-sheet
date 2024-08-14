@@ -26,6 +26,7 @@ import Divider from "./Divider";
 import Menu from "./Menu";
 import SVGIcon from "../SVGIcon";
 import { useAlert } from "../../hooks/useAlert";
+import { useOutsideClick } from "../../hooks/useOutsideClick";
 
 const SelectItem: React.FC<{
   item: FilterValue;
@@ -79,6 +80,7 @@ const DateSelectTreeItem: React.FC<{
           onExpand?.(item.key, !expand);
           setExpand(!expand);
         }}
+        tabIndex={0}
       >
         {_.isEmpty(item.children) ? (
           <div style={{ width: 10 }} />
@@ -96,6 +98,7 @@ const DateSelectTreeItem: React.FC<{
             onChange(item, !checked);
           }}
           onClick={(e) => e.stopPropagation()}
+          tabIndex={0}
         />
         <div>{item.text}</div>
         <span className="count">{`( ${item.rows.length} )`}</span>
@@ -142,7 +145,7 @@ const DateSelectTree: React.FC<{
 };
 
 const FilterMenu: React.FC = () => {
-  const { context, setContext, settings } = useContext(WorkbookContext);
+  const { context, setContext, settings, refs } = useContext(WorkbookContext);
   const containerRef = useRef<HTMLDivElement>(null);
   const contextRef = useRef<Context>(context);
   const byColorMenuRef = useRef<HTMLDivElement>(null);
@@ -179,8 +182,11 @@ const FilterMenu: React.FC = () => {
   const hiddenRows = useRef<number[]>([]);
   const [showValues, setShowValues] = useState<string[]>([]);
   const [searchText, setSearchText] = useState("");
-  const [subMenuPos, setSubMenuPos] =
-    useState<{ left?: number; top: number; right?: number }>();
+  const [subMenuPos, setSubMenuPos] = useState<{
+    left?: number;
+    top: number;
+    right?: number;
+  }>();
   const [filterColors, setFilterColors] = useState<{
     bgColors: FilterColor[];
     fcColors: FilterColor[];
@@ -188,6 +194,16 @@ const FilterMenu: React.FC = () => {
   const [showSubMenu, setShowSubMenu] = useState(false);
   const { showAlert } = useAlert();
   const mouseHoverSubMenu = useRef<boolean>(false);
+  contextRef.current = context;
+
+  // 点击其他区域的时候关闭FilterMenu
+  const close = useCallback(() => {
+    setContext((ctx) => {
+      ctx.filterContextMenu = undefined;
+    });
+  }, [setContext]);
+
+  useOutsideClick(containerRef, close, [close]);
 
   const initialExpand = useCallback((key: string) => {
     const expand = dateTreeExpandState.current[key];
@@ -291,6 +307,7 @@ const FilterMenu: React.FC = () => {
                 key={v.color}
                 className="item"
                 onClick={() => onSelectChange(key, v.color, !v.checked)}
+                tabIndex={0}
               >
                 <div
                   className="color-label"
@@ -318,6 +335,11 @@ const FilterMenu: React.FC = () => {
     const winH = window.innerHeight;
     const winW = window.innerWidth;
     const rect = containerRef.current.getBoundingClientRect();
+    const workbookRect =
+      refs.workbookContainer.current?.getBoundingClientRect();
+    if (!workbookRect) {
+      return;
+    }
     const menuW = rect.width;
     // menu最小高度
     const menuH = 350;
@@ -325,11 +347,11 @@ const FilterMenu: React.FC = () => {
     let left = filterContextMenu.x;
 
     let hasOverflow = false;
-    if (left + menuW > winW) {
+    if (workbookRect.left + left + menuW > winW) {
       left -= menuW;
       hasOverflow = true;
     }
-    if (top + menuH > winH) {
+    if (workbookRect.top + top + menuH > winH) {
       top -= menuH;
       hasOverflow = true;
     }
@@ -342,6 +364,14 @@ const FilterMenu: React.FC = () => {
     if (containerH < 0) {
       containerH = 100;
     }
+    // 防止Maximum update depth exceeded错误，如果当前值和前一个filterContextMenu值一样则不进行赋值
+    if (
+      filterContextMenu.x === left &&
+      filterContextMenu.y === top &&
+      filterContextMenu.listBoxMaxHeight === containerH
+    ) {
+      return;
+    }
     setContext((draftCtx) => {
       if (hasOverflow) {
         _.set(draftCtx, "filterContextMenu.x", left);
@@ -352,19 +382,16 @@ const FilterMenu: React.FC = () => {
   }, [filterContextMenu, setContext]);
 
   useLayoutEffect(() => {
+    if (!subMenuPos) return;
     // re-position the subMenu if it overflows the window
     const rect = byColorMenuRef.current?.getBoundingClientRect();
     const subMenuRect = subMenuRef.current?.getBoundingClientRect();
     if (rect == null || subMenuRect == null) return;
-    if (subMenuPos!.left! < rect.right) return;
+
     const winW = window.innerWidth;
-    let hasOverflow = false;
-    const pos = { top: rect.top - 5 };
-    if (rect.right + subMenuRect.width > winW) {
-      hasOverflow = true;
-      _.set(pos, "left", rect.left - subMenuRect.width);
-    }
-    if (hasOverflow) {
+    const pos = _.cloneDeep(subMenuPos);
+    if (subMenuRect.left + subMenuRect.width > winW) {
+      pos.left! -= subMenuRect.width;
       setSubMenuPos(pos);
     }
   }, [subMenuPos]);
@@ -516,17 +543,26 @@ const FilterMenu: React.FC = () => {
                 <div className="luckysheet-filter-byvalue">
                   <div className="fortune-menuitem-row byvalue-btn-row">
                     <div>
-                      <span className="fortune-byvalue-btn" onClick={selectAll}>
+                      <span
+                        className="fortune-byvalue-btn"
+                        onClick={selectAll}
+                        tabIndex={0}
+                      >
                         {filter.filterValueByAllBtn}
                       </span>
                       {" - "}
-                      <span className="fortune-byvalue-btn" onClick={clearAll}>
+                      <span
+                        className="fortune-byvalue-btn"
+                        onClick={clearAll}
+                        tabIndex={0}
+                      >
                         {filter.filterValueByClearBtn}
                       </span>
                       {" - "}
                       <span
                         className="fortune-byvalue-btn"
                         onClick={inverseSelect}
+                        tabIndex={0}
                       >
                         {filter.filterValueByInverseBtn}
                       </span>
@@ -654,6 +690,7 @@ const FilterMenu: React.FC = () => {
                 draftCtx.filterContextMenu = undefined;
               });
             }}
+            tabIndex={0}
           >
             {filter.filterConform}
           </div>
@@ -664,6 +701,7 @@ const FilterMenu: React.FC = () => {
                 draftCtx.filterContextMenu = undefined;
               });
             }}
+            tabIndex={0}
           >
             {filter.filterCancel}
           </div>
@@ -674,6 +712,7 @@ const FilterMenu: React.FC = () => {
                 clearFilter(draftCtx);
               });
             }}
+            tabIndex={0}
           >
             {filter.clearFilter}
           </div>
@@ -746,6 +785,7 @@ const FilterMenu: React.FC = () => {
                     draftCtx.filterContextMenu = undefined;
                   });
                 }}
+                tabIndex={0}
               >
                 {filter.filterConform}
               </div>

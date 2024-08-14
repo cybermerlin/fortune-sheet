@@ -24,6 +24,11 @@
 
 我们的目标是让`FortuneSheet`越来越强大，同时易于维护。
 
+## 交流
+* [Discord](https://discord.gg/vHGwMB77w5) 英文社群
+* [QQ](https://jq.qq.com/?_wv=1027&k=iHaSN47J) 中文社群
+* [Xiemala](https://xiemala.com/s/ctJmUn)
+
 ## 在线样例
 
 项目的在线Demo：[fortune-sheet-demo](https://ruilisi.github.io/fortune-sheet-demo/)
@@ -63,7 +68,7 @@
 - ✅ 增加测试代码.
 - 更多基础功能:
   - ✅ 下拉填充
-  - 字体
+  - ✅字体
   - ✅ 格式刷
   - ✅ 评论
   - ✅ 插入图片
@@ -74,13 +79,13 @@
   - ✅ 排序
   - ✅ 筛选
   - ✅ 事件钩子
-  - 条件格式
+  - ✅ 条件格式
   - ✅ 拖拽
   - ✅ 查找和替换
   - 定位
-  - 数据验证
+  - ✅ 数据验证
   - ✅ 冻结
-  - 隐藏、冻结，文本分列
+  - ✅ 隐藏、冻结，文本分列
 - 更多高级功能:
   - 数据透视表
   - 图表
@@ -94,13 +99,30 @@
 ## 快速开始 (react)
 
 ### 安装库
-```shell
-yarn add @fortune-sheet/react
-```
-或使用 npm:
+
+<details open>
+<summary>使用 npm</summary>
+
 ```shell
 npm install @fortune-sheet/react
 ```
+</details>
+
+<details>
+<summary>使用 pnpm</summary>
+
+```shell
+pnpm install @fortune-sheet/react
+```
+</details>
+
+<details>
+<summary>使用 yarn</summary>
+
+```shell
+yarn add @fortune-sheet/react
+```
+</details>
 
 ### 创建一个HTML容器
 ```html
@@ -150,7 +172,7 @@ op对后端数据修改和同步在线协同数据非常有用。
 
 通过 `node index.js` 运行后端服务器，然后访问 [Collabration example](https://ruilisi.github.io/fortune-sheet-demo/?path=/story/collabration--example) 即可体验。(可通过 http://localhost:8081/init 初始化数据)
 
-详细的 `Op` 文档, 请参考 [fortune-sheet-doc](https://ruilisi.github.io/fortune-sheet-docs/zh/guide/op.html)
+详细的 `Op` 文档, 请参考 [fortune-sheet-doc](./docs/zh/guide/op.md)
 
 ## 迁移Luckysheet数据
 FortuneSheet的总体数据结构与Luckysheet相同，只有几处命名的区别：
@@ -161,7 +183,7 @@ FortuneSheet的总体数据结构与Luckysheet相同，只有几处命名的区�
 ## 贡献
 期望的工作流程为: Fork -> Patch -> Push -> Pull Request
 
-请确保仔细阅读 [贡献指南](https://ruilisi.github.io/fortune-sheet-docs/zh/guide/contribute.html)。
+请确保仔细阅读 [贡献指南](./docs/zh/guide/contribute.md)。
 
 
 ## 开发

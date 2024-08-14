@@ -145,7 +145,7 @@ export const LocationCondition: React.FC<{}> = () => {
   );
 
   return (
-    <div id="fortunesheet-location-condition">
+    <div id="fortune-location-condition">
       <div className="title">{findAndReplace.location}</div>
       <div className="listbox">
         {/* 常量 */}
@@ -264,6 +264,7 @@ export const LocationCondition: React.FC<{}> = () => {
           hideDialog();
           onConfirm();
         }}
+        tabIndex={0}
       >
         {button.confirm}
       </div>
@@ -272,6 +273,7 @@ export const LocationCondition: React.FC<{}> = () => {
         onClick={() => {
           hideDialog();
         }}
+        tabIndex={0}
       >
         {button.cancel}
       </div>

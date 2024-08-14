@@ -9,6 +9,7 @@ import {
   getSheetIndex,
   indexToColumnChar,
   getSheetIdByName,
+  escapeHTMLTag,
 } from "../utils";
 import {
   getcellFormula,
@@ -20,14 +21,11 @@ import { error } from "./validation";
 import { moveToEnd } from "./cursor";
 import { locale } from "../locale";
 import { colors } from "./color";
-import { colLocation, rowLocation } from "./location";
-import {
-  cancelFunctionrangeSelected,
-  escapeHTML,
-  seletedHighlistByindex,
-} from ".";
+import { colLocation, mousePosition, rowLocation } from "./location";
+import { cancelFunctionrangeSelected, seletedHighlistByindex } from ".";
 
 let functionHTMLIndex = 0;
+let rangeIndexes: number[] = [];
 const operatorPriority: any = {
   "^": 0,
   "%": 1,
@@ -136,19 +134,26 @@ export class FormulaCache {
         if (id == null) throw Error(ERROR_REF);
         const flowdata = getFlowdata(context, id);
         const fragment = [];
+        let startRow = startCellCoord.row.index;
+        let endRow = endCellCoord.row.index;
+        let startCol = startCellCoord.column.index;
+        let endCol = endCellCoord.column.index;
+        const emptyRow = startRow === -1 || endRow === -1;
+        const emptyCol = startCol === -1 || endCol === -1;
+        if (emptyRow) {
+          startRow = 0;
+          endRow = flowdata?.length ?? 0;
+        }
+        if (emptyCol) {
+          startCol = 0;
+          endCol = flowdata?.[0].length ?? 0;
+        }
+        if (emptyRow && emptyCol) throw Error(ERROR_REF);
 
-        for (
-          let row = startCellCoord.row.index;
-          row <= endCellCoord.row.index;
-          row += 1
-        ) {
+        for (let row = startRow; row <= endRow; row += 1) {
           const colFragment = [];
 
-          for (
-            let col = startCellCoord.column.index;
-            col <= endCellCoord.column.index;
-            col += 1
-          ) {
+          for (let col = startCol; col <= endCol; col += 1) {
             const cell =
               context?.formulaCache.execFunctionGlobalData?.[
                 `${row}_${col}_${id}`
@@ -407,10 +412,10 @@ function checkSpecialFunctionRange(
   cellRangeFunction?: any
 ) {
   if (
-    function_str.startsWith("luckysheet_getSpecialReference") ||
-    function_str.startsWith("luckysheet_function.")
+    function_str.substring(0, 30) === "luckysheet_getSpecialReference" ||
+    function_str.substring(0, 20) === "luckysheet_function."
   ) {
-    if (function_str.startsWith("luckysheet_function.")) {
+    if (function_str.substring(0, 20) === "luckysheet_function.") {
       let funcName = function_str.split(".")[1];
       if (!_.isNil(funcName)) {
         funcName = funcName.toUpperCase();
@@ -425,11 +430,11 @@ function checkSpecialFunctionRange(
     }
     try {
       ctx.calculateSheetId = id;
-      let str = new Function(`return ${function_str}`)();
+      const str = function_str
+        .split(",")
+        [function_str.split(",").length - 1].split("'")[1]
+        .split("'")[0];
 
-      if (str instanceof Object && !_.isNil(str.startCell)) {
-        str = str.startCell;
-      }
       const str_nb = _.trim(str);
       // console.log(function_str, tempFunc,str, this.iscelldata(str_nb),this.isFunctionRangeSave,r,c);
       if (iscelldata(str_nb)) {
@@ -452,7 +457,7 @@ function isFunctionRange(
   dynamicArray_compute: any,
   cellRangeFunction: any
 ) {
-  if (txt.startsWith("=")) {
+  if (txt.substring(0, 1) === "=") {
     txt = txt.substring(1);
   }
 
@@ -719,10 +724,10 @@ function isFunctionRange(
     if (i === funcstack.length - 1) {
       let endstr = "";
       let str_nb = _.trim(str).replace(/'/g, "\\'");
-      if (iscelldata(str_nb) && !str_nb.startsWith(":")) {
+      if (iscelldata(str_nb) && str_nb.substring(0, 1) !== ":") {
         // endstr = "luckysheet_getcelldata('" + _.trim(str) + "')";
         endstr = `luckysheet_getcelldata('${str_nb}')`;
-      } else if (str_nb.startsWith(":")) {
+      } else if (str_nb.substring(0, 1) === ":") {
         str_nb = str_nb.substring(1);
         if (iscelldata(str_nb)) {
           endstr = `luckysheet_getSpecialReference(false,${function_str},'${str_nb}')`;
@@ -733,7 +738,7 @@ function isFunctionRange(
         const regx = /{.*?}/;
         if (
           regx.test(str) &&
-          !str.startsWith('"') &&
+          str.substring(0, 1) !== '"' &&
           str.substring(str.length - 1, 1) !== '"'
         ) {
           const arraytxt = regx.exec(str)?.[0];
@@ -777,7 +782,6 @@ function isFunctionRange(
 
     i += 1;
   }
-  // console.log(function_str);
   checkSpecialFunctionRange(
     ctx,
     function_str,
@@ -943,7 +947,8 @@ export function insertUpdateFunctionGroup(
   ctx: Context,
   r: number,
   c: number,
-  id?: string
+  id?: string,
+  calcChainSet?: Set<string>
 ) {
   if (_.isNil(id)) {
     id = ctx.currentSheetId;
@@ -967,14 +972,18 @@ export function insertUpdateFunctionGroup(
     calcChain = [];
   }
 
-  for (let i = 0; i < calcChain.length; i += 1) {
-    const calc = calcChain[i];
-    if (calc.r === r && calc.c === c && calc.id === id) {
-      // server.saveParam("fc", index, calc, {
-      //   op: "update",
-      //   pos: i,
-      // });
-      return;
+  if (calcChainSet) {
+    if (calcChainSet.has(`${r}_${c}_${id}`)) return;
+  } else {
+    for (let i = 0; i < calcChain.length; i += 1) {
+      const calc = calcChain[i];
+      if (calc.r === r && calc.c === c && calc.id === id) {
+        // server.saveParam("fc", index, calc, {
+        //   op: "update",
+        //   pos: i,
+        // });
+        return;
+      }
     }
   }
 
@@ -999,6 +1008,7 @@ export function execfunction(
   r: number,
   c: number,
   id?: string,
+  calcChainSet?: Set<string>,
   isrefresh?: boolean,
   notInsertFunc?: boolean
 ) {
@@ -1140,10 +1150,21 @@ export function execfunction(
   */
 
   ctx.formulaCache.parser.context = ctx;
-  const { result, error: formulaError } = ctx.formulaCache.parser.parse(
-    txt.substring(1),
-    { sheetId: id || ctx.currentSheetId }
-  );
+  const parsedResponse = ctx.formulaCache.parser.parse(txt.substring(1), {
+    sheetId: id || ctx.currentSheetId,
+  });
+
+  const { error: formulaError } = parsedResponse;
+  let { result } = parsedResponse;
+
+  // https://stackoverflow.com/a/643827/8200626
+  // https://github.com/ruilisi/fortune-sheet/issues/551
+  if (
+    Object.prototype.toString.call(result) === "[object Date]" &&
+    !_.isNil(result)
+  ) {
+    result = result.toString();
+  }
 
   if (!_.isNil(r) && !_.isNil(c)) {
     if (isrefresh) {
@@ -1158,7 +1179,7 @@ export function execfunction(
     }
 
     if (!notInsertFunc) {
-      insertUpdateFunctionGroup(ctx, r, c, id);
+      insertUpdateFunctionGroup(ctx, r, c, id, calcChainSet);
     }
   }
 
@@ -1412,7 +1433,7 @@ export function execFunctionGroup(
       );
     } else if (
       !(
-        calc_funcStr.startsWith('="') &&
+        calc_funcStr.substring(0, 2) === '="' &&
         calc_funcStr.substring(calc_funcStr.length - 1, 1) === '"'
       )
     ) {
@@ -1636,6 +1657,11 @@ export function execFunctionGroup(
 
   formulaRunList.reverse();
 
+  const calcChainSet = new Set<string>();
+  calcChains.forEach((item) => {
+    calcChainSet.add(`${item.r}_${item.c}_${item.id}`);
+  });
+
   // console.log(formulaObjects, ii)
   // console.timeEnd("3");
 
@@ -1653,7 +1679,8 @@ export function execFunctionGroup(
       calc_funcStr,
       formulaCell.r,
       formulaCell.c,
-      formulaCell.id
+      formulaCell.id,
+      calcChainSet
     );
 
     ctx.groupValuesRefreshData.push({
@@ -1684,7 +1711,7 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
   const v_a = v.replace(re, "").split("</span>");
   const vp_a = vp.replace(re, "").split("</span>");
   v_a.pop();
-  vp_a.pop();
+  if (vp_a[vp_a.length - 1] === "") vp_a.pop();
 
   let pfri = ctx.formulaCache.functionRangeIndex;
   if (pfri == null) return [];
@@ -1722,7 +1749,7 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
       if (
         !_.isNil(p) &&
         !_.isNil(v_a[i + 1]) &&
-        v_a[i + 1].startsWith('"') &&
+        v_a[i + 1].substring(0, 1) === '"' &&
         (p.indexOf("{") > -1 || p.indexOf("}") > -1)
       ) {
         pfri[0] += 1;
@@ -1757,16 +1784,16 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
     } else if (p.length === n.length) {
       if (
         !_.isNil(v_a[i + 1]) &&
-        (v_a[i + 1].startsWith('"') ||
-          v_a[i + 1].startsWith("{") ||
-          v_a[i + 1].startsWith("}"))
+        (v_a[i + 1].substring(0, 1) === '"' ||
+          v_a[i + 1].substring(0, 1) === "{" ||
+          v_a[i + 1].substring(0, 1) === "}")
       ) {
         pfri[0] += 1;
         pfri[1] = 1;
       } else if (
         !_.isNil(p) &&
         p.length > 2 &&
-        p.startsWith('"') &&
+        p.substring(0, 1) === '"' &&
         p.substring(p.length - 1, 1) === '"'
       ) {
         // pfri[1] = n.length-1;
@@ -1784,9 +1811,9 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
     } else if (p.length > n.length) {
       if (
         !_.isNil(v_a[i + 1]) &&
-        (v_a[i + 1].startsWith('"') ||
-          v_a[i + 1].startsWith("{") ||
-          v_a[i + 1].startsWith("}"))
+        (v_a[i + 1].substring(0, 1) === '"' ||
+          v_a[i + 1].substring(0, 1) === "{" ||
+          v_a[i + 1].substring(0, 1) === "}")
       ) {
         pfri[0] += 1;
         pfri[1] = 1;
@@ -1815,32 +1842,33 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
       }
     } else if (p.length === n.length) {
       if (
-        _.isNil(vp_a[i + 1]) &&
-        (vp_a[i + 1].startsWith('"') ||
-          vp_a[i + 1].startsWith("{") ||
-          vp_a[i + 1].startsWith("}"))
+        vp_a[i + 1] != null &&
+        (vp_a[i + 1].substring(0, 1) === '"' ||
+          vp_a[i + 1].substring(0, 1) === "{" ||
+          vp_a[i + 1].substring(0, 1) === "}")
       ) {
         pfri[1] = n.length;
       } else if (
         !_.isNil(v_a[i + 1]) &&
-        v_a[i + 1].startsWith('"') &&
-        (v_a[i + 1].startsWith("{") || v_a[i + 1].startsWith("}"))
+        v_a[i + 1].substring(0, 1) === '"' &&
+        (v_a[i + 1].substring(0, 1) === "{" ||
+          v_a[i + 1].substring(0, 1) === "}")
       ) {
         pfri[0] += 1;
         pfri[1] = 1;
       } else if (
         !_.isNil(n) &&
-        n.startsWith('"') &&
+        n.substring(0, 1) === '"' &&
         n.substring(n.length - 1, 1) === '"' &&
-        p.startsWith('"') &&
+        p.substring(0, 1) === '"' &&
         p.substring(p.length - 1, 1) === ")"
       ) {
         pfri[1] = n.length;
       } else if (
         !_.isNil(n) &&
-        n.startsWith("{") &&
+        n.substring(0, 1) === "{" &&
         n.substring(n.length - 1, 1) === "}" &&
-        p.startsWith("(") &&
+        p.substring(0, 1) === "{" &&
         p.substring(p.length - 1, 1) === ")"
       ) {
         pfri[1] = n.length;
@@ -1855,22 +1883,28 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
 
       return pfri;
     } else if (p.length > n.length) {
-      if (!_.isNil(p) && p.startsWith('"')) {
+      if (!_.isNil(p) && p.substring(0, 1) === '"') {
         pfri[1] = n.length;
       } else if (_.isNil(v_a[i + 1]) && /{.*?}/.test(v_a[i + 1])) {
         pfri[0] += 1;
         pfri[1] = v_a[i + 1].length;
       } else if (
         !_.isNil(p) &&
-        v_a[i + 1].startsWith('"') &&
+        v_a[i + 1].substring(0, 1) === '"' &&
         (p.indexOf("{") > -1 || p.indexOf("}") > -1)
       ) {
         pfri[0] += 1;
         pfri[1] = 1;
       } else if (!_.isNil(p) && (p.indexOf("{") > -1 || p.indexOf("}") > -1)) {
+      } else if (
+        !_.isNil(p) &&
+        !_.startsWith(p[0], "=") &&
+        _.startsWith(n, "=")
+      ) {
+        return [vlen - 1, v_a[vlen - 1].length];
       } else {
         pfri[0] = pfri[0] + vlen - vplen - 1;
-        pfri[1] = v_a[i - 1].length;
+        pfri[1] = v_a[(i || 1) - 1].length;
       }
 
       return pfri;
@@ -1891,7 +1925,11 @@ export function createFormulaRangeSelect(
   ctx.formulaRangeSelect = select;
 }
 
-export function createRangeHightlight(ctx: Context, inputInnerHtmlStr: string) {
+export function createRangeHightlight(
+  ctx: Context,
+  inputInnerHtmlStr: string,
+  ignoreRangeIndex = -1
+) {
   const $span = parseElement(`<div>${inputInnerHtmlStr}</div>`) as HTMLElement;
   const formulaRanges: {
     rangeIndex: number;
@@ -1905,6 +1943,7 @@ export function createRangeHightlight(ctx: Context, inputInnerHtmlStr: string) {
     .querySelectorAll("span.fortune-formula-functionrange-cell")
     .forEach((ele) => {
       const rangeIndex = parseInt(ele.getAttribute("rangeindex") || "0", 10);
+      if (rangeIndex === ignoreRangeIndex) return;
       const cellrange = getcellrange(ctx, ele.textContent || "");
       if (
         rangeIndex === ctx.formulaCache.selectingRangeIndex ||
@@ -1916,17 +1955,20 @@ export function createRangeHightlight(ctx: Context, inputInnerHtmlStr: string) {
         (cellrange.sheetId === -1 &&
           ctx.formulaCache.rangetosheet === ctx.currentSheetId)
       ) {
-        formulaRanges.push({
-          rangeIndex,
-          ...seletedHighlistByindex(
-            ctx,
-            cellrange.row[0],
-            cellrange.row[1],
-            cellrange.column[0],
-            cellrange.column[1]
-          ),
-          backgroundColor: colors[rangeIndex],
-        });
+        const rect = seletedHighlistByindex(
+          ctx,
+          cellrange.row[0],
+          cellrange.row[1],
+          cellrange.column[0],
+          cellrange.column[1]
+        );
+        if (rect) {
+          formulaRanges.push({
+            rangeIndex,
+            ...rect,
+            backgroundColor: colors[rangeIndex],
+          });
+        }
       }
     });
   ctx.formulaRangeHighlight = formulaRanges;
@@ -1948,6 +1990,7 @@ export function setCaretPosition(
     sel?.addRange(range);
     el.focus();
   } catch (err) {
+    console.error(err);
     moveToEnd(ctx.formulaCache.rangeResizeTo[0]);
   }
 }
@@ -2011,7 +2054,7 @@ function searchFunction(ctx: Context, searchtxt: string) {
     if (n === searchtxt) {
       f.unshift(item);
       result_i += 1;
-    } else if (n.startsWith(searchtxt)) {
+    } else if (_.startsWith(n, searchtxt)) {
       s.unshift(item);
       result_i += 1;
     } else if (n.indexOf(searchtxt) > -1) {
@@ -2045,7 +2088,7 @@ function searchFunction(ctx: Context, searchtxt: string) {
   // );
 }
 
-function getrangeseleciton() {
+export function getrangeseleciton() {
   const currSelection = window.getSelection();
   if (!currSelection) return null;
   const { anchorNode, anchorOffset } = currSelection;
@@ -2142,7 +2185,7 @@ function helpFunctionExe(
   //   );
 
   //   for (let i = 0; i < functionlist.length; i++) {
-  //     _this.functionlistPosition[functionlist[i].n] = i;
+  //     functionlistPosition[functionlist[i].n] = i;
   //   }
   // }
   if (_.isEmpty(ctx.formulaCache.functionlistMap)) {
@@ -2393,7 +2436,8 @@ function functionHTML(txt: string) {
       let s_pre = null;
       if (p >= 0) {
         do {
-          s_pre = funcstack[(p -= 1)];
+          s_pre = funcstack[p];
+          p -= 1;
         } while (p >= 0 && s_pre === " ");
       }
 
@@ -2435,7 +2479,11 @@ function functionHTML(txt: string) {
     if (i === funcstack.length - 1) {
       // function_str += str;
       if (iscelldata(_.trim(str))) {
-        function_str += `<span class="fortune-formula-functionrange-cell" rangeindex="${functionHTMLIndex}" dir="auto" style="color:${colors[functionHTMLIndex]};">${str}</span>`;
+        const rangeIndex =
+          rangeIndexes.length > functionHTMLIndex
+            ? rangeIndexes[functionHTMLIndex]
+            : functionHTMLIndex;
+        function_str += `<span class="fortune-formula-functionrange-cell" rangeindex="${rangeIndex}" dir="auto" style="color:${colors[rangeIndex]};">${str}</span>`;
         functionHTMLIndex += 1;
       } else if (matchConfig.dquote > 0) {
         function_str += `${str}</span>`;
@@ -2477,7 +2525,7 @@ function functionHTML(txt: string) {
 }
 
 export function functionHTMLGenerate(txt: string) {
-  if (txt.length === 0 || !txt.startsWith("=")) {
+  if (txt.length === 0 || txt.substring(0, 1) !== "=") {
     return txt;
   }
 
@@ -2488,29 +2536,48 @@ export function functionHTMLGenerate(txt: string) {
   )}`;
 }
 
+function getRangeIndexes($editor: HTMLDivElement) {
+  const res: number[] = [];
+  $editor
+    .querySelectorAll("span.fortune-formula-functionrange-cell")
+    .forEach((ele) => {
+      const indexStr = ele.getAttribute("rangeindex");
+      if (indexStr) {
+        const rangeIndex = parseInt(indexStr, 10);
+        res.push(rangeIndex);
+      }
+    });
+  return res;
+}
+
 export function handleFormulaInput(
   ctx: Context,
-  $copyTo: HTMLDivElement,
+  $copyTo: HTMLDivElement | null | undefined,
   $editor: HTMLDivElement,
-  kcode: number
+  kcode: number,
+  preText?: string,
+  refreshRangeSelect = true
 ) {
   // if (isEditMode()) {
   //   // 此模式下禁用公式栏
   //   return;
   // }
-  let value1 = $editor.innerHTML;
-  value1 = escapeHTML(value1);
-  const value1txt = $editor.innerText;
+  let value1: string;
+  const value1txt = preText ?? $editor.innerText;
   let value = $editor.innerText;
   value = escapeScriptTag(value);
-  value = escapeHTML(value);
   if (
     value.length > 0 &&
-    value.startsWith("=") &&
+    value.substring(0, 1) === "=" &&
     (kcode !== 229 || value.length === 1)
   ) {
+    if (!refreshRangeSelect) rangeIndexes = getRangeIndexes($editor);
     value = functionHTMLGenerate(value);
+    if (!refreshRangeSelect && functionHTMLIndex < rangeIndexes.length)
+      refreshRangeSelect = true;
     value1 = functionHTMLGenerate(value1txt);
+
+    rangeIndexes = [];
 
     if (window.getSelection) {
       // all browsers, except IE before version 9
@@ -2518,11 +2585,12 @@ export function handleFormulaInput(
       if (!currSelection) return;
       if (currSelection.anchorNode?.nodeName.toLowerCase() === "div") {
         const editorlen = $editor.querySelectorAll("span").length;
-        ctx.formulaCache.functionRangeIndex = [
-          editorlen - 1,
-          $editor.querySelectorAll("span").item(editorlen - 1).textContent
-            ?.length!,
-        ];
+        if (editorlen > 0)
+          ctx.formulaCache.functionRangeIndex = [
+            editorlen - 1,
+            $editor.querySelectorAll("span").item(editorlen - 1).textContent
+              ?.length!,
+          ];
       } else {
         ctx.formulaCache.functionRangeIndex = [
           _.indexOf(
@@ -2541,30 +2609,37 @@ export function handleFormulaInput(
     }
 
     $editor.innerHTML = value;
+    if ($copyTo) $copyTo.innerHTML = value;
+
     // the cursor will be set to the beginning of input box after set innerHTML,
     // restoring it to the correct position
     functionRange(ctx, $editor, value, value1);
-    cancelFunctionrangeSelected(ctx);
 
-    if (kcode !== 46) {
-      // delete不执行此函数
-      createRangeHightlight(ctx, value);
+    if (refreshRangeSelect) {
+      cancelFunctionrangeSelected(ctx);
+
+      if (kcode !== 46) {
+        // delete不执行此函数
+        createRangeHightlight(ctx, value);
+      }
+
+      ctx.formulaCache.rangestart = false;
+      ctx.formulaCache.rangedrag_column_start = false;
+      ctx.formulaCache.rangedrag_row_start = false;
+
+      rangeHightlightselected(ctx, $editor);
     }
-
-    $copyTo.innerHTML = value;
-    // rangestart = false;
-    // rangedrag_column_start = false;
-    // rangedrag_row_start = false;
-
-    rangeHightlightselected(ctx, $editor);
-  } else if (!value1txt.startsWith("=")) {
+  } else if (_.startsWith(value1txt, "=") && !_.startsWith(value, "=")) {
+    if ($copyTo) $copyTo.innerHTML = value;
+    $editor.innerHTML = escapeHTMLTag(value);
+  } else if (!_.startsWith(value1txt, "=")) {
     if (!$copyTo) return;
     if ($copyTo.id === "luckysheet-rich-text-editor") {
-      if (!$copyTo.innerHTML.startsWith("<span")) {
-        $copyTo.innerHTML = value;
+      if (!_.startsWith($copyTo.innerHTML, "<span")) {
+        $copyTo.innerHTML = escapeHTMLTag(value);
       }
     } else {
-      $copyTo.innerHTML = value;
+      $copyTo.innerHTML = escapeHTMLTag(value);
     }
   }
 }
@@ -2814,10 +2889,10 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
       const ahr = anchor.parentNode.previousSibling;
       txt = _.trim(ahr.textContent || "");
       lasttxt = txt.substring(txt.length - 1, 1);
-      ctx.formulaCache.rangeSetValueTo = ahr;
+      ctx.formulaCache.rangeSetValueTo = anchor.parentNode;
     } else {
       lasttxt = txt.substring(anchorOffset - 1, 1);
-      ctx.formulaCache.rangeSetValueTo = anchor.parentNode.nextSibling;
+      ctx.formulaCache.rangeSetValueTo = anchor.parentNode;
     }
 
     if (
@@ -2906,7 +2981,7 @@ export function functionStrChange(
   if (!txt) {
     return "";
   }
-  if (txt.startsWith("=")) {
+  if (txt.substring(0, 1) === "=") {
     txt = txt.substring(1);
   }
 
@@ -3054,8 +3129,15 @@ export function functionStrChange(
 export function rangeSetValue(
   ctx: Context,
   cellInput: HTMLDivElement,
-  selected: any
+  selected: any,
+  fxInput?: HTMLDivElement | null
 ) {
+  let $editor = cellInput;
+  let $copyTo = fxInput;
+  if (document.activeElement?.id === "luckysheet-functionbox-cell") {
+    $editor = fxInput!;
+    $copyTo = cellInput;
+  }
   let range = "";
   const rf = selected.row[0];
   const cf = selected.column[0];
@@ -3191,7 +3273,7 @@ export function rangeSetValue(
     // const $span = $editor
     //   .find(`span[rangeindex='${formulaCache.rangechangeindex}']`)
     //   .html(range);
-    const span = cellInput.querySelector(
+    const span = $editor.querySelector(
       `span[rangeindex='${ctx.formulaCache.rangechangeindex}']`
     ) as HTMLSpanElement;
     if (span) {
@@ -3201,27 +3283,22 @@ export function rangeSetValue(
     //   }
   } else {
     const function_str = `<span class="fortune-formula-functionrange-cell" rangeindex="${functionHTMLIndex}" dir="auto" style="color:${colors[functionHTMLIndex]};">${range}</span>`;
-    cellInput.insertBefore(
-      parseElement(function_str),
-      ctx.formulaCache.rangeSetValueTo
-    );
+    const newEle = parseElement(function_str);
+    const refEle = ctx.formulaCache.rangeSetValueTo;
+    if (refEle && refEle.parentNode) {
+      refEle.parentNode.insertBefore(newEle, refEle.nextSibling);
+    } else {
+      $editor.appendChild(newEle);
+    }
     ctx.formulaCache.rangechangeindex = functionHTMLIndex;
-    const span = cellInput.querySelector(
+    const span = $editor.querySelector(
       `span[rangeindex='${ctx.formulaCache.rangechangeindex}']`
     ) as HTMLSpanElement;
     setCaretPosition(ctx, span, 0, range.length);
     functionHTMLIndex += 1;
   }
 
-  // if ($editor.attr("id") === "luckysheet-rich-text-editor") {
-  //   $("#luckysheet-functionbox-cell").html(
-  //     $("#luckysheet-rich-text-editor").html()
-  //   );
-  // } else {
-  //   $("#luckysheet-rich-text-editor").html(
-  //     $("#luckysheet-functionbox-cell").html()
-  //   );
-  // }
+  if ($copyTo) $copyTo.innerHTML = $editor.innerHTML;
 }
 
 export function onFormulaRangeDragEnd(ctx: Context) {
@@ -3233,22 +3310,40 @@ export function onFormulaRangeDragEnd(ctx: Context) {
       height_move: height,
     } = ctx.formulaCache.func_selectedrange;
     if (
-      left == null ||
-      top == null ||
-      width == null ||
-      height == null ||
-      !ctx.formulaCache.rangestart
+      left != null &&
+      top != null &&
+      width != null &&
+      height != null &&
+      (ctx.formulaCache.rangestart ||
+        ctx.formulaCache.rangedrag_column_start ||
+        ctx.formulaCache.rangedrag_row_start)
     )
-      return;
-    ctx.formulaRangeSelect = {
-      rangeIndex: ctx.formulaCache.rangeIndex || 0,
-      left,
-      top,
-      width,
-      height,
-    };
+      ctx.formulaRangeSelect = {
+        rangeIndex: ctx.formulaCache.rangeIndex || 0,
+        left,
+        top,
+        width,
+        height,
+      };
   }
   ctx.formulaCache.selectingRangeIndex = -1;
+}
+
+function setRangeSelect(
+  container: HTMLDivElement,
+  left: number,
+  top: number,
+  height: number,
+  width: number
+) {
+  const rangeElement = container.querySelector(
+    ".fortune-formula-functionrange-select"
+  ) as HTMLDivElement;
+  if (rangeElement == null) return;
+  rangeElement.style.left = `${left}px`;
+  rangeElement.style.top = `${top}px`;
+  rangeElement.style.height = `${height}px`;
+  rangeElement.style.width = `${width}px`;
 }
 
 export function rangeDrag(
@@ -3257,7 +3352,8 @@ export function rangeDrag(
   cellInput: HTMLDivElement,
   scrollLeft: number,
   scrollTop: number,
-  container: HTMLDivElement
+  container: HTMLDivElement,
+  fxInput?: HTMLDivElement | null
 ) {
   const { func_selectedrange } = ctx.formulaCache;
   if (
@@ -3272,15 +3368,9 @@ export function rangeDrag(
   const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft;
   const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop;
 
-  const row_location = rowLocation(y, ctx.visibledatarow);
-  const row = row_location[1];
-  const row_pre = row_location[0];
-  const row_index = row_location[2];
+  const [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
 
-  const col_location = colLocation(x, ctx.visibledatacolumn);
-  const col = col_location[1];
-  const col_pre = col_location[0];
-  const col_index = col_location[2];
+  const [col_pre, col, col_index] = colLocation(x, ctx.visibledatacolumn);
 
   let top = 0;
   let height = 0;
@@ -3354,10 +3444,6 @@ export function rangeDrag(
 
   // luckysheet_count_show(left, top, width, height, rowseleted, columnseleted);
 
-  const rangeElement = container.querySelector(
-    ".fortune-formula-functionrange-select"
-  ) as HTMLDivElement;
-
   // if ($("#luckysheet-ifFormulaGenerator-multiRange-dialog").is(":visible")) {
   //   // if公式生成器 选择范围
   //   const range = getRangetxt(
@@ -3368,18 +3454,216 @@ export function rangeDrag(
   //   );
   //   $("#luckysheet-ifFormulaGenerator-multiRange-dialog input").val(range);
   // } else {
-  rangeSetValue(ctx, cellInput, {
-    row: rowseleted,
-    column: columnseleted,
-  });
-  if (rangeElement == null) return;
-  rangeElement.style.left = `${left}px`;
-  rangeElement.style.top = `${top}px`;
-  rangeElement.style.height = `${height}px`;
-  rangeElement.style.width = `${width}px`;
+  rangeSetValue(
+    ctx,
+    cellInput,
+    {
+      row: rowseleted,
+      column: columnseleted,
+    },
+    fxInput
+  );
+
+  setRangeSelect(container, left, top, height, width);
   // }
 
   // luckysheetFreezen.scrollFreezen(rowseleted, columnseleted);
+  e.preventDefault();
+}
+
+export function rangeDragColumn(
+  ctx: Context,
+  e: MouseEvent,
+  cellInput: HTMLDivElement,
+  scrollLeft: number,
+  scrollTop: number,
+  container: HTMLDivElement,
+  fxInput?: HTMLDivElement | null
+) {
+  const { func_selectedrange } = ctx.formulaCache;
+  if (
+    !func_selectedrange ||
+    func_selectedrange.left == null ||
+    func_selectedrange.height == null ||
+    func_selectedrange.top == null ||
+    func_selectedrange.width == null
+  )
+    return;
+  const mouse = mousePosition(e.pageX, e.pageY, ctx);
+  const x = mouse[0] + scrollLeft;
+
+  const { visibledatarow } = ctx;
+  const row_index = visibledatarow.length - 1;
+  const row = visibledatarow[row_index];
+  const row_pre = 0;
+
+  const [col_pre, col, col_index] = colLocation(x, ctx.visibledatacolumn);
+
+  let left = 0;
+  let width = 0;
+  let columnseleted = [];
+
+  if (func_selectedrange.left > col_pre) {
+    left = col_pre;
+    width = func_selectedrange.left + func_selectedrange.width - col_pre;
+    columnseleted = [col_index, func_selectedrange.column[1]];
+  } else if (func_selectedrange.left === col_pre) {
+    left = col_pre;
+    width = func_selectedrange.left + func_selectedrange.width - col_pre;
+    columnseleted = [col_index, func_selectedrange.column[0]];
+  } else {
+    left = func_selectedrange.left;
+    width = col - func_selectedrange.left - 1;
+    columnseleted = [func_selectedrange.column[0], col_index];
+  }
+
+  // // rowseleted[0] = luckysheetFreezen.changeFreezenIndex(rowseleted[0], "h");
+  // // rowseleted[1] = luckysheetFreezen.changeFreezenIndex(rowseleted[1], "h");
+  // columnseleted[0] = luckysheetFreezen.changeFreezenIndex(
+  //   columnseleted[0],
+  //   "v"
+  // );
+  // columnseleted[1] = luckysheetFreezen.changeFreezenIndex(
+  //   columnseleted[1],
+  //   "v"
+  // );
+
+  const changeparam = mergeMoveMain(
+    ctx,
+    columnseleted,
+    [0, row_index],
+    func_selectedrange,
+    row_pre,
+    row - row_pre - 1,
+    left,
+    width
+  );
+  if (changeparam != null) {
+    // @ts-ignore
+    [columnseleted, , , , left, width] = changeparam;
+    // rowseleted= changeparam[1];
+    // top = changeparam[2];
+    // height = changeparam[3];
+    // left = changeparam[4];
+    // width = changeparam[5];
+  }
+
+  func_selectedrange.column = columnseleted;
+  func_selectedrange.left_move = left;
+  func_selectedrange.width_move = width;
+
+  // luckysheet_count_show(
+  //   left,
+  //   row_pre,
+  //   width,
+  //   row - row_pre - 1,
+  //   [0, row_index],
+  //   columnseleted
+  // );
+
+  rangeSetValue(
+    ctx,
+    cellInput,
+    {
+      row: [null, null],
+      column: columnseleted,
+    },
+    fxInput
+  );
+
+  setRangeSelect(container, left, row_pre, row - row_pre - 1, width);
+
+  // luckysheetFreezen.scrollFreezen([0, row_index], columnseleted);
+}
+
+export function rangeDragRow(
+  ctx: Context,
+  e: MouseEvent,
+  cellInput: HTMLDivElement,
+  scrollLeft: number,
+  scrollTop: number,
+  container: HTMLDivElement,
+  fxInput?: HTMLDivElement | null
+) {
+  const { func_selectedrange } = ctx.formulaCache;
+  if (
+    !func_selectedrange ||
+    func_selectedrange.left == null ||
+    func_selectedrange.height == null ||
+    func_selectedrange.top == null ||
+    func_selectedrange.width == null
+  )
+    return;
+
+  const mouse = mousePosition(e.pageX, e.pageY, ctx);
+  const y = mouse[1] + scrollTop;
+
+  const [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
+
+  const { visibledatacolumn } = ctx;
+  const col_index = visibledatacolumn.length - 1;
+  const col = visibledatacolumn[col_index];
+  const col_pre = 0;
+
+  let top = 0;
+  let height = 0;
+  let rowseleted = [];
+
+  if (func_selectedrange.top > row_pre) {
+    top = row_pre;
+    height = func_selectedrange.top + func_selectedrange.height - row_pre;
+    rowseleted = [row_index, func_selectedrange.row[1]];
+  } else if (func_selectedrange.top === row_pre) {
+    top = row_pre;
+    height = func_selectedrange.top + func_selectedrange.height - row_pre;
+    rowseleted = [row_index, func_selectedrange.row[0]];
+  } else {
+    top = func_selectedrange.top;
+    height = row - func_selectedrange.top - 1;
+    rowseleted = [func_selectedrange.row[0], row_index];
+  }
+
+  // rowseleted[0] = luckysheetFreezen.changeFreezenIndex(rowseleted[0], "h");
+  // rowseleted[1] = luckysheetFreezen.changeFreezenIndex(rowseleted[1], "h");
+  // // columnseleted[0] = luckysheetFreezen.changeFreezenIndex(columnseleted[0], "v");
+  // // columnseleted[1] = luckysheetFreezen.changeFreezenIndex(columnseleted[1], "v");
+
+  const changeparam = mergeMoveMain(
+    ctx,
+    [0, col_index],
+    rowseleted,
+    func_selectedrange,
+    top,
+    height,
+    col_pre,
+    col - col_pre - 1
+  );
+  if (changeparam != null) {
+    // @ts-ignore
+    [, rowseleted, top, height] = changeparam;
+  }
+
+  func_selectedrange.row = rowseleted;
+  func_selectedrange.top_move = top;
+  func_selectedrange.height_move = height;
+
+  // luckysheet_count_show(col_pre, top, col - col_pre - 1, height, rowseleted, [
+  //   0,
+  //   col_index,
+  // ]);
+
+  rangeSetValue(
+    ctx,
+    cellInput,
+    {
+      row: rowseleted,
+      column: [null, null],
+    },
+    fxInput
+  );
+  setRangeSelect(container, col_pre, top, height, col - col_pre - 1);
+
+  // luckysheetFreezen.scrollFreezen(rowseleted, [0, col_index]);
 }
 
 function updateparam(orient: string, txt: string, step: number) {
@@ -3526,7 +3810,7 @@ export function functionCopy(
     step = 1;
   }
 
-  if (txt.startsWith("=")) {
+  if (txt.substring(0, 1) === "=") {
     txt = txt.substring(1);
   }
 

@@ -1,7 +1,9 @@
 import numeral from "numeral";
-import { setCellValue } from ".";
+import _ from "lodash";
+import { execfunction, functionCopy, update } from ".";
 import {
   Cell,
+  CellMatrix,
   Context,
   diff,
   getFlowdata,
@@ -9,6 +11,7 @@ import {
   isRealNull,
   isRealNum,
 } from "..";
+import { jfrefreshgrid } from "./refresh";
 
 export function orderbydata(
   isAsc: boolean,
@@ -55,13 +58,68 @@ export function orderbydata(
     return 0;
   };
   const d = (x: any, y: any) => a(y, x);
-  if (isAsc) {
-    return data.sort(a);
-  }
-  return data.sort(d);
+  const sortedData = _.clone(data);
+  sortedData.sort(isAsc ? a : d);
+
+  // calc row offsets
+  const rowOffsets = sortedData.map((r, i) => {
+    const origIndex = _.findIndex(data, (origR) => origR === r);
+    return i - origIndex;
+  });
+
+  return { sortedData, rowOffsets };
 }
 
-export function sortSelection(ctx: Context, isAsc: boolean) {
+export function sortDataRange(
+  ctx: Context,
+  sheetData: CellMatrix,
+  dataRange: CellMatrix,
+  index: number,
+  isAsc: boolean,
+  str: number,
+  edr: number,
+  stc: number,
+  edc: number
+) {
+  const { sortedData, rowOffsets } = orderbydata(isAsc, index, dataRange);
+
+  for (let r = str; r <= edr; r += 1) {
+    for (let c = stc; c <= edc; c += 1) {
+      const cell = sortedData[r - str][c - stc];
+      if (cell?.f) {
+        const moveOffset = rowOffsets[r - str];
+        let func = cell?.f!;
+        if (moveOffset > 0) {
+          func = `=${functionCopy(ctx, func, "down", moveOffset)}`;
+        } else if (moveOffset < 0) {
+          func = `=${functionCopy(ctx, func, "up", -moveOffset)}`;
+        }
+        const funcV = execfunction(ctx, func, r, c, undefined, undefined, true);
+        [, cell!.v, cell!.f] = funcV;
+        cell.m = update(cell.ct?.fa || "General", cell.v);
+      }
+      sheetData[r][c] = cell;
+    }
+  }
+
+  // let allParam = {};
+  // if (ctx.config.rowlen != null) {
+  //   let cfg = _.assign({}, ctx.config);
+  //   cfg = rowlenByRange(d, str, edr, cfg);
+
+  //   allParam = {
+  //     cfg,
+  //     RowlChange: true,
+  //   };
+  // }
+  jfrefreshgrid(ctx, sheetData, [{ row: [str, edr], column: [stc, edc] }]);
+}
+
+export function sortSelection(
+  ctx: Context,
+  isAsc: boolean,
+  colIndex: number = 0
+) {
   // if (!checkProtectionAuthorityNormal(ctx.currentSheetIndex, "sort")) {
   //   return;
   // }
@@ -93,7 +151,7 @@ export function sortSelection(ctx: Context, isAsc: boolean) {
   const c1 = ctx.luckysheet_select_save[0].column[0];
   const c2 = ctx.luckysheet_select_save[0].column[1];
 
-  let str;
+  let str: number | null = null;
   let edr;
 
   for (let r = r1; r <= r2; r += 1) {
@@ -122,7 +180,7 @@ export function sortSelection(ctx: Context, isAsc: boolean) {
   }
 
   let hasMc = false; // 排序选区是否有合并单元格
-  let data = [];
+  const data: CellMatrix = [];
   if (edr == null) return;
   for (let r = str; r <= edr; r += 1) {
     const data_row = [];
@@ -147,25 +205,6 @@ export function sortSelection(ctx: Context, isAsc: boolean) {
 
     return;
   }
-  data = orderbydata(isAsc, 0, data);
 
-  for (let r = str; r <= edr; r += 1) {
-    for (let c = c1; c <= c2; c += 1) {
-      d[r][c] = data[r - str][c - c1];
-      setCellValue(ctx, r, c, d, data[r - str][c - c1]);
-    }
-  }
-  // let allParam = {};
-  // if (ctx.config.rowlen != null) {
-  //   // let cfg = $.extend(true, {}, Store.config);
-  //   let cfg = _.cloneDeep(ctx.config);
-  //   cfg = rowlenByRange(d, str, edr, cfg);
-
-  //   allParam = {
-  //     cfg,
-  //     RowlChange: true,
-  //   };
-  // }
-
-  // jfrefreshgrid(d, [{ row: [str, edr], column: [c1, c2] }], allParam);
+  sortDataRange(ctx, d, data, colIndex, isAsc, str, edr, c1, c2);
 }

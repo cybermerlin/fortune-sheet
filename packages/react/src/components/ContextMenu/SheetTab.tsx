@@ -88,6 +88,16 @@ const SheetTabContextMenu: React.FC = () => {
     setIsShowInputColor(state);
   }, []);
 
+  const focusSheet = useCallback(() => {
+    if (context.allowEdit === false) return;
+    if (!sheet?.id) return;
+    setContext((ctx) => {
+      _.forEach(ctx.luckysheetfile, (sheetfile) => {
+        sheetfile.status = sheet.id === sheetfile.id ? 1 : 0;
+      });
+    });
+  }, [context.allowEdit, setContext, sheet?.id]);
+
   if (!sheet || x == null || y == null) return null;
 
   return (
@@ -210,11 +220,24 @@ const SheetTabContextMenu: React.FC = () => {
             >
               {sheetconfig.changeColor}
               <span className="change-color-triangle">
-                <SVGIcon name="changeColor" width={18} />
+                <SVGIcon name="rightArrow" width={18} />
               </span>
               {isShowChangeColor && context.allowEdit && (
                 <ChangeColor triggerParentUpdate={updateShowInputColor} />
               )}
+            </Menu>
+          );
+        }
+        if (name === "focus") {
+          return (
+            <Menu
+              key={name}
+              onClick={() => {
+                focusSheet();
+                close();
+              }}
+            >
+              {sheetconfig.focus}
             </Menu>
           );
         }

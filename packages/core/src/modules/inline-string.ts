@@ -3,7 +3,6 @@ import { Context } from "../context";
 import { Cell, CellMatrix, CellStyle } from "../types";
 import { getCellValue, getFontStyleByCell } from "./cell";
 import { selectTextContent, selectTextContentCross } from "./cursor";
-import { escapeHTML } from "./format";
 
 export const attrToCssName = {
   bl: "font-weight",
@@ -54,13 +53,12 @@ export function getInlineStringNoStyle(r: number, c: number, data: CellMatrix) {
         value += strObj.v;
       }
     }
-    value = escapeHTML(value);
     return value;
   }
   return "";
 }
 
-export function convertCssToStyleList(cssText: string) {
+export function convertCssToStyleList(cssText: string, originCell: Cell) {
   if (_.isEmpty(cssText)) {
     return {};
   }
@@ -68,12 +66,12 @@ export function convertCssToStyleList(cssText: string) {
 
   const styleList: CellStyle = {
     // ff: locale_fontarray[0], // font family
-    fc: "#000000", // font color
-    fs: 10, // font size
-    cl: 0, // strike
-    un: 0, // underline
-    bl: 0, // blod
-    it: 0, // italic
+    fc: originCell.fc || "#000000", // font color
+    fs: originCell.fs || 10, // font size
+    cl: originCell.cl || 0, // strike
+    un: originCell.un || 0, // underline
+    bl: originCell.bl || 0, // blod
+    it: originCell.it || 0, // italic
   };
   cssTextArray.forEach((s) => {
     s = s.toLowerCase();
@@ -82,16 +80,12 @@ export function convertCssToStyleList(cssText: string) {
     if (key === "font-weight") {
       if (value === "bold") {
         styleList.bl = 1;
-      } else {
-        styleList.bl = 0;
       }
     }
 
     if (key === "font-style") {
       if (value === "italic") {
         styleList.it = 1;
-      } else {
-        styleList.it = 0;
       }
     }
 
@@ -132,14 +126,20 @@ export function convertCssToStyleList(cssText: string) {
   return styleList;
 }
 
-// eslint-disable-next-line no-undef
-export function convertSpanToShareString($dom: NodeListOf<HTMLSpanElement>) {
+export function convertSpanToShareString(
+  // eslint-disable-next-line no-undef
+  $dom: NodeListOf<HTMLSpanElement>,
+  originCell: Cell
+) {
   const styles: CellStyle[] = [];
   let preStyleList: Cell;
   let preStyleListString = null;
   for (let i = 0; i < $dom.length; i += 1) {
     const span = $dom[i];
-    const styleList = convertCssToStyleList(span.style.cssText) as Cell;
+    const styleList = convertCssToStyleList(
+      span.style.cssText,
+      originCell
+    ) as Cell;
 
     const curStyleListString = JSON.stringify(styleList);
     // let v = span.innerHTML;
@@ -363,6 +363,7 @@ export function updateInlineStringFormat(
   // let s = ctx.inlineStringEditCache;
   const w = window.getSelection();
   if (!w) return;
+  if (w.rangeCount === 0) return;
 
   const range = w.getRangeAt(0);
 
@@ -386,7 +387,7 @@ export function updateInlineStringFormat(
       const content = span?.innerHTML || "";
 
       const fullContent = $textEditor.innerHTML;
-      if (!fullContent.startsWith("<span")) {
+      if (fullContent.substring(0, 5) !== "<span") {
         inherit = true;
       }
 

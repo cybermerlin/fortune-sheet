@@ -3,7 +3,6 @@ import {
   Canvas,
   updateContextWithCanvas,
   updateContextWithSheetData,
-  groupValuesRefresh,
   handleGlobalWheel,
   initFreeze,
   Sheet as SheetType,
@@ -21,7 +20,7 @@ const Sheet: React.FC<Props> = ({ sheet }) => {
   // const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const placeholderRef = useRef<HTMLDivElement>(null);
-  const { context, setContext, refs } = useContext(WorkbookContext);
+  const { context, setContext, refs, settings } = useContext(WorkbookContext);
 
   /**
    * Update data on window resize
@@ -30,8 +29,10 @@ const Sheet: React.FC<Props> = ({ sheet }) => {
     function resize() {
       if (!data) return;
       setContext((draftCtx) => {
+        if (settings.devicePixelRatio === 0) {
+          draftCtx.devicePixelRatio = (globalThis || window).devicePixelRatio;
+        }
         updateContextWithSheetData(draftCtx, data);
-        draftCtx.devicePixelRatio = window.devicePixelRatio;
         updateContextWithCanvas(
           draftCtx,
           refs.canvas.current!,
@@ -43,7 +44,7 @@ const Sheet: React.FC<Props> = ({ sheet }) => {
     return () => {
       window.removeEventListener("resize", resize);
     };
-  }, [data, refs.canvas, setContext]);
+  }, [data, refs.canvas, setContext, settings.devicePixelRatio]);
 
   /**
    * Recalculate row/col info when data changes
@@ -57,6 +58,7 @@ const Sheet: React.FC<Props> = ({ sheet }) => {
     context.config?.rowhidden,
     context.config.colhidden,
     data,
+    context.zoomRatio,
     setContext,
   ]);
 
@@ -71,7 +73,13 @@ const Sheet: React.FC<Props> = ({ sheet }) => {
         placeholderRef.current!
       )
     );
-  }, [refs.canvas, setContext]);
+  }, [
+    refs.canvas,
+    setContext,
+    context.rowHeaderWidth,
+    context.columnHeaderHeight,
+    context.devicePixelRatio,
+  ]);
 
   /**
    * Recalculate freeze data when sheet changes or sheet.frozen changes
@@ -229,17 +237,6 @@ const Sheet: React.FC<Props> = ({ sheet }) => {
     }
   }, [context, refs.canvas, refs.globalCache.freezen, setContext, sheet.id]);
 
-  /**
-   * Apply the calculation results
-   */
-  useEffect(() => {
-    if (context.groupValuesRefreshData.length > 0) {
-      setContext((draftCtx) => {
-        groupValuesRefresh(draftCtx);
-      });
-    }
-  }, [context.groupValuesRefreshData.length, setContext]);
-
   const onWheel = useCallback(
     (e: WheelEvent) => {
       setContext((draftCtx) => {
@@ -251,6 +248,7 @@ const Sheet: React.FC<Props> = ({ sheet }) => {
           refs.scrollbarY.current!
         );
       });
+      e.preventDefault();
     },
     [refs.globalCache, refs.scrollbarX, refs.scrollbarY, setContext]
   );

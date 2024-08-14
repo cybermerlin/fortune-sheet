@@ -2,6 +2,29 @@ import _ from "lodash";
 import { Context } from "../context";
 import { getSheetByIndex } from "../utils";
 
+export function checkCellIsLocked(
+  ctx: Context,
+  r: number,
+  c: number,
+  sheetId: string
+) {
+  const sheetFile = getSheetByIndex(ctx, sheetId);
+  if (_.isNil(sheetFile)) {
+    return false;
+  }
+  const { data } = sheetFile;
+  const cell = data?.[r]?.[c];
+  // cell have lo attribute
+  if (!_.isNil(cell?.lo)) {
+    return !!cell?.lo;
+  }
+
+  // default locked status from sheet config
+  const aut = sheetFile.config?.authority;
+  const sheetInEditable = _.isNil(aut) || _.isNil(aut.sheet) || aut.sheet === 0;
+  return !sheetInEditable;
+}
+
 export function checkProtectionSelectLockedOrUnLockedCells(
   ctx: Context,
   r: number,
@@ -88,5 +111,30 @@ export function checkProtectionAllSelected(ctx: Context, sheetId: string) {
     return true;
   }
 
+  return false;
+}
+
+// formatCells authority, bl cl fc fz ff ct  border etc.
+export function checkProtectionFormatCells(ctx: Context) {
+  const sheetFile = getSheetByIndex(ctx, ctx.currentSheetId);
+
+  if (_.isNil(sheetFile)) {
+    return true;
+  }
+  if (_.isNil(sheetFile.config) || _.isNil(sheetFile.config.authority)) {
+    return true;
+  }
+  const aut = sheetFile.config.authority;
+  if (_.isNil(aut) || _.isNil(aut.sheet) || aut.sheet === 0) {
+    return true;
+  }
+
+  let ht = "";
+  if (!_.isNil(aut.hintText) && aut.hintText.length > 0) {
+    ht = aut.hintText;
+  } else {
+    ht = aut.defaultSheetHintText;
+  }
+  ctx.warnDialog = ht;
   return false;
 }

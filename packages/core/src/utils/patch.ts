@@ -156,6 +156,8 @@ export function extractFormulaCellOps(ops: Op[]) {
       }
     } else if (op.path.length === 3 && op.value?.f) {
       formulaOps.push(op);
+    } else if (op.path.length === 4 && op.path[3] === "f") {
+      formulaOps.push(op);
     }
   });
   return formulaOps;
@@ -183,6 +185,25 @@ export function patchToOp(
       }
     }
     return op;
+  });
+  _.every(ops, (p) => {
+    if (
+      p.op === "replace" &&
+      !_.isNil(p.value?.hl) &&
+      p.path.length === 3 &&
+      p.path![0] === "data"
+    ) {
+      const index = getSheetIndex(ctx, p.id!) as number;
+      ops.push({
+        id: p!.id!,
+        op: "replace",
+        path: ["hyperlink", `${p.path[1]}_${p.path![2]}`],
+        value:
+          ctx.luckysheetfile[index].hyperlink![
+            `${p.value!.hl!.r!}_${p.value!.hl.c!}`
+          ],
+      });
+    }
   });
   if (options?.insertRowColOp) {
     const [nonDataOps, dataOps] = _.partition(ops, (p) => p.path[0] !== "data");
@@ -360,6 +381,7 @@ export function opToPatch(ctx: Context, ops: Op[]): [Patch[], Op[]] {
     ops,
     (op) => op.op === "add" || op.op === "remove" || op.op === "replace"
   );
+  const additionalPatches: Patch[] = [];
   const patches = normalOps.map((op) => {
     const patch: Patch = {
       op: op.op as "add" | "remove" | "replace",
@@ -373,10 +395,13 @@ export function opToPatch(ctx: Context, ops: Op[]): [Patch[], Op[]] {
       } else {
         // throw new Error(`sheet id: ${op.id} not found`);
       }
+      if (op.path[0] === "images" && op.id === ctx.currentSheetId) {
+        additionalPatches.push({ ...patch, path: ["insertedImgs"] });
+      }
     }
     return patch;
   });
-  return [patches, specialOps];
+  return [patches.concat(additionalPatches), specialOps];
 }
 
 export function inverseRowColOptions(

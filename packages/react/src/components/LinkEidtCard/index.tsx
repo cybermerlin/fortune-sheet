@@ -87,10 +87,18 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
   const renderBottomButton = useCallback(
     (onOk: () => void, onCancel: () => void) => (
       <div className="button-group">
-        <div className="button-basic button-default" onClick={onCancel}>
+        <div
+          className="button-basic button-default"
+          onClick={onCancel}
+          tabIndex={0}
+        >
           {button.cancel}
         </div>
-        <div className="button-basic button-primary" onClick={onOk}>
+        <div
+          className="button-basic button-primary"
+          onClick={onOk}
+          tabIndex={0}
+        >
           {button.confirm}
         </div>
       </div>
@@ -100,7 +108,7 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
 
   const renderToolbarButton = useCallback(
     (iconId: string, onClick: () => void) => (
-      <div className="fortune-toolbar-button" onClick={onClick}>
+      <div className="fortune-toolbar-button" onClick={onClick} tabIndex={0}>
         <SVGIcon name={iconId} style={{ width: 18, height: 18 }} />
       </div>
     ),
@@ -147,7 +155,7 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
           e.stopPropagation();
         }}
         className="fortune-link-modify-modal link-toolbar"
-        style={{ left: position.cellLeft + 20, top: position.cellBottom + 4 }}
+        style={{ left: position.cellLeft + 20, top: position.cellBottom }}
       >
         <div
           className="link-content"
@@ -164,6 +172,7 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
               )
             );
           }}
+          tabIndex={0}
         >
           {linkType === "webpage"
             ? insertLink.openLink
@@ -210,6 +219,7 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
       <div
         className="modal-icon-close"
         onClick={() => setRangeModalVisible(false)}
+        tabIndex={0}
       >
         <SVGIcon name="close" />
       </div>
@@ -241,7 +251,7 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
       className="fortune-link-modify-modal"
       style={{
         left: position.cellLeft + 20,
-        top: position.cellBottom + 4,
+        top: position.cellBottom,
       }}
       {...containerEvent}
     >
@@ -314,6 +324,7 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
             <div
               className="fortune-link-modify-cell-selector"
               onClick={() => setRangeModalVisible(true)}
+              tabIndex={0}
             >
               <SVGIcon name="border-all" />
             </div>

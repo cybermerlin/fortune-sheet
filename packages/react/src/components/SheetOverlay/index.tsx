@@ -10,28 +10,30 @@ import "./index.css";
 import {
   locale,
   drawArrow,
-  getFlowdata,
   handleCellAreaDoubleClick,
   handleCellAreaMouseDown,
   handleContextMenu,
   handleOverlayMouseMove,
   handleOverlayMouseUp,
   selectAll,
-  getSelectionStyle,
   handleOverlayTouchEnd,
   handleOverlayTouchMove,
   handleOverlayTouchStart,
   createDropCellRange,
-  expandRowsAndColumns,
   getCellRowColumn,
   getCellHyperlink,
   showLinkCard,
   Context,
   GlobalCache,
   onCellsMoveStart,
+  insertRowCol,
+  getSheetIndex,
+  fixRowStyleOverflowInFreeze,
+  fixColumnStyleOverflowInFreeze,
+  handleKeydownForZoom,
 } from "@fortune-sheet/core";
 import _ from "lodash";
-import WorkbookContext from "../../context";
+import WorkbookContext, { SetContextOptions } from "../../context";
 import ColumnHeader from "./ColumnHeader";
 import RowHeader from "./RowHeader";
 import InputBox from "./InputBox";
@@ -42,12 +44,18 @@ import FilterOptions from "../FilterOption";
 import { useAlert } from "../../hooks/useAlert";
 import ImgBoxs from "../ImgBoxs";
 import NotationBoxes from "../NotationBoxes";
+import RangeDialog from "../DataVerification/RangeDialog";
+import { useDialog } from "../../hooks/useDialog";
+import SVGIcon from "../SVGIcon";
+import DropDownList from "../DataVerification/DropdownList";
 
 const SheetOverlay: React.FC = () => {
   const { context, setContext, settings, refs } = useContext(WorkbookContext);
-  const { info } = locale(context);
+  const { info, rightclick } = locale(context);
+  const { showDialog } = useDialog();
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomAddRowInputRef = useRef<HTMLInputElement>(null);
+  const dataVerificationHintBoxRef = useRef<HTMLDivElement>(null);
   const { showAlert } = useAlert();
   // const isMobile = browser.mobilecheck();
   const cellAreaMouseDown = useCallback(
@@ -62,12 +70,29 @@ const SheetOverlay: React.FC = () => {
             nativeEvent,
             refs.cellInput.current!,
             refs.cellArea.current!,
-            refs.fxInput.current!
+            refs.fxInput.current!,
+            refs.canvas.current!.getContext("2d")!
           );
+
+          if (
+            !_.isEmpty(draftCtx.luckysheet_select_save?.[0]) &&
+            refs.cellInput.current
+          ) {
+            setTimeout(() => {
+              refs.cellInput.current?.focus();
+            });
+          }
         });
       }
     },
-    [refs.cellArea, refs.cellInput, refs.globalCache, refs.fxInput, setContext]
+    [
+      setContext,
+      refs.globalCache,
+      refs.cellInput,
+      refs.cellArea,
+      refs.fxInput,
+      refs.canvas,
+    ]
   );
 
   const cellAreaContextMenu = useCallback(
@@ -169,13 +194,15 @@ const SheetOverlay: React.FC = () => {
           refs.cellInput.current!,
           refs.scrollbarX.current!,
           refs.scrollbarY.current!,
-          containerRef.current!
+          containerRef.current!,
+          refs.fxInput.current
         );
       });
     },
     [
       overShowLinkCard,
       refs.cellInput,
+      refs.fxInput,
       refs.globalCache,
       refs.scrollbarX,
       refs.scrollbarY,
@@ -194,7 +221,9 @@ const SheetOverlay: React.FC = () => {
             nativeEvent,
             refs.scrollbarX.current!,
             refs.scrollbarY.current!,
-            containerRef.current!
+            containerRef.current!,
+            refs.cellInput.current,
+            refs.fxInput.current
           );
         } catch (e: any) {
           showAlert(e.message);
@@ -202,6 +231,8 @@ const SheetOverlay: React.FC = () => {
       });
     },
     [
+      refs.cellInput,
+      refs.fxInput,
       refs.globalCache,
       refs.scrollbarX,
       refs.scrollbarY,
@@ -209,6 +240,21 @@ const SheetOverlay: React.FC = () => {
       settings,
       showAlert,
     ]
+  );
+
+  const onKeyDownForZoom = useCallback(
+    (ev: KeyboardEvent) => {
+      const newZoom = handleKeydownForZoom(ev, context.zoomRatio);
+      if (newZoom !== context.zoomRatio) {
+        setContext((ctx) => {
+          ctx.zoomRatio = newZoom;
+          ctx.luckysheetfile[
+            getSheetIndex(ctx, ctx.currentSheetId)!
+          ].zoomRatio = newZoom;
+        });
+      }
+    },
+    [context.zoomRatio, setContext]
   );
 
   const onTouchStart = useCallback(
@@ -244,26 +290,46 @@ const SheetOverlay: React.FC = () => {
   }, [refs.globalCache]);
 
   const handleBottomAddRow = useCallback(() => {
-    let valueStr = bottomAddRowInputRef.current?.value || "";
-    setContext((draftCtx) => {
-      const data = getFlowdata(draftCtx);
-      if (valueStr === "") {
-        valueStr = draftCtx.addDefaultRows.toString();
-      }
-      const value = parseInt(valueStr, 10);
-      if (Number.isNaN(value)) {
-        return;
-      }
-      if (value < 1) {
-        return;
-      }
-      try {
-        expandRowsAndColumns(data!, value, 0);
-      } catch (e: any) {
-        showAlert(e.message);
-      }
-    });
-  }, [setContext, showAlert]);
+    const valueStr =
+      bottomAddRowInputRef.current?.value || context.addDefaultRows.toString();
+    const value = parseInt(valueStr, 10);
+    if (Number.isNaN(value)) {
+      return;
+    }
+    if (value < 1) {
+      return;
+    }
+    const insertRowColOp: SetContextOptions["insertRowColOp"] = {
+      type: "row",
+      index:
+        context.luckysheetfile[
+          getSheetIndex(context, context!.currentSheetId! as string) as number
+        ].data!.length - 1,
+      count: value,
+      direction: "rightbottom",
+      id: context.currentSheetId,
+    };
+    setContext(
+      (draftCtx) => {
+        try {
+          insertRowCol(draftCtx, insertRowColOp, false);
+        } catch (err: any) {
+          if (err.message === "maxExceeded") showAlert(rightclick.rowOverLimit);
+        }
+      },
+      { insertRowColOp }
+    );
+  }, [context, rightclick.rowOverLimit, setContext, showAlert]);
+
+  // 提醒弹窗
+  useEffect(() => {
+    if (context.warnDialog) {
+      setTimeout(() => {
+        showDialog(context.warnDialog, "ok");
+      }, 240);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context.warnDialog]);
 
   useEffect(() => {
     refs.cellArea.current!.scrollLeft = context.scrollLeft;
@@ -276,16 +342,16 @@ const SheetOverlay: React.FC = () => {
     refs.cellArea.current?.scrollTop,
   ]);
 
-  useEffect(() => {
-    // ensure cell input is always focused to accept first key stroke on cell
-    if (!context.editingCommentBox) {
-      refs.cellInput.current?.focus({ preventScroll: true });
-    }
-  }, [
-    context.editingCommentBox,
-    context.luckysheet_select_save,
-    refs.cellInput,
-  ]);
+  // useEffect(() => {
+  //   // ensure cell input is always focused to accept first key stroke on cell
+  //   if (!context.editingCommentBox) {
+  //     refs.cellInput.current?.focus({ preventScroll: true });
+  //   }
+  // }, [
+  //   context.editingCommentBox,
+  //   context.luckysheet_select_save,
+  //   refs.cellInput,
+  // ]);
 
   useLayoutEffect(() => {
     if (
@@ -324,6 +390,13 @@ const SheetOverlay: React.FC = () => {
     };
   }, [onMouseUp]);
 
+  useEffect(() => {
+    document.addEventListener("keydown", onKeyDownForZoom);
+    return () => {
+      document.removeEventListener("keydown", onKeyDownForZoom);
+    };
+  }, [onKeyDownForZoom]);
+
   return (
     <div
       className="fortune-sheet-overlay"
@@ -341,6 +414,7 @@ const SheetOverlay: React.FC = () => {
         <div
           className="fortune-left-top"
           onClick={onLeftTopClick}
+          tabIndex={0}
           style={{
             width: context.rowHeaderWidth - 1.5,
             height: context.columnHeaderHeight - 1.5,
@@ -348,7 +422,7 @@ const SheetOverlay: React.FC = () => {
         />
         <ColumnHeader />
       </div>
-      {context.showSearchReplace && (
+      {(context.showSearch || context.showReplace) && (
         <SearchReplace getContainer={() => containerRef.current!} />
       )}
       <div className="fortune-row-body">
@@ -426,20 +500,46 @@ const SheetOverlay: React.FC = () => {
             className="fortune-change-size-line"
             hidden={
               !context.luckysheet_cols_change_size &&
-              !context.luckysheet_rows_change_size
+              !context.luckysheet_rows_change_size &&
+              !context.luckysheet_cols_freeze_drag &&
+              !context.luckysheet_rows_freeze_drag
+            }
+          />
+          <div
+            className="fortune-freeze-drag-line"
+            hidden={
+              !context.luckysheet_cols_freeze_drag &&
+              !context.luckysheet_rows_freeze_drag
             }
           />
           <div
             className="luckysheet-cell-selected-focus"
             style={
               (context.luckysheet_select_save?.length ?? 0) > 0
-                ? {
-                    display: "block",
-                    left: _.last(context.luckysheet_select_save)?.left,
-                    width: _.last(context.luckysheet_select_save)?.width,
-                    top: _.last(context.luckysheet_select_save)?.top,
-                    height: _.last(context.luckysheet_select_save)?.height,
-                  }
+                ? (() => {
+                    const selection = _.last(context.luckysheet_select_save)!;
+                    return _.assign(
+                      {
+                        left: selection.left,
+                        top: selection.top,
+                        width: selection.width,
+                        height: selection.height,
+                        display: "block",
+                      },
+                      fixRowStyleOverflowInFreeze(
+                        context,
+                        selection.row_focus || 0,
+                        selection.row_focus || 0,
+                        refs.globalCache.freezen?.[context.currentSheetId]
+                      ),
+                      fixColumnStyleOverflowInFreeze(
+                        context,
+                        selection.column_focus || 0,
+                        selection.column_focus || 0,
+                        refs.globalCache.freezen?.[context.currentSheetId]
+                      )
+                    );
+                  })()
                 : {}
             }
             onMouseDown={(e) => e.preventDefault()}
@@ -494,10 +594,26 @@ const SheetOverlay: React.FC = () => {
                   key={index}
                   id="luckysheet-cell-selected"
                   className="luckysheet-cell-selected"
-                  style={getSelectionStyle(
-                    context,
-                    selection,
-                    refs.globalCache.freezen?.[context.currentSheetId]
+                  style={_.assign(
+                    {
+                      left: selection.left_move,
+                      top: selection.top_move,
+                      width: selection.width_move,
+                      height: selection.height_move,
+                      display: "block",
+                    },
+                    fixRowStyleOverflowInFreeze(
+                      context,
+                      selection.row[0],
+                      selection.row[1],
+                      refs.globalCache.freezen?.[context.currentSheetId]
+                    ),
+                    fixColumnStyleOverflowInFreeze(
+                      context,
+                      selection.column[0],
+                      selection.column[1],
+                      refs.globalCache.freezen?.[context.currentSheetId]
+                    )
                   )}
                   onMouseDown={(e) => {
                     e.stopPropagation();
@@ -603,20 +719,35 @@ const SheetOverlay: React.FC = () => {
           {context.linkCard?.sheetId === context.currentSheetId && (
             <LinkEditCard {...context.linkCard} />
           )}
+          {context.rangeDialog?.show && <RangeDialog />}
           <FilterOptions getContainer={() => containerRef.current!} />
           <InputBox />
           <NotationBoxes />
           <div id="luckysheet-multipleRange-show" />
           <div id="luckysheet-dynamicArray-hightShow" />
           <ImgBoxs />
-          <div id="luckysheet-dataVerification-dropdown-btn" />
           <div
+            id="luckysheet-dataVerification-dropdown-btn"
+            onClick={() => {
+              setContext((ctx) => {
+                ctx.dataVerificationDropDownList = true;
+                dataVerificationHintBoxRef.current!.style.display = "none";
+              });
+            }}
+            tabIndex={0}
+            style={{ display: "none" }}
+          >
+            <SVGIcon name="combo-arrow" width={16} />
+          </div>
+          {context.dataVerificationDropDownList && <DropDownList />}
+          {/* <div
             id="luckysheet-dataVerification-dropdown-List"
             className="luckysheet-mousedown-cancel"
-          />
+          /> */}
           <div
             id="luckysheet-dataVerification-showHintBox"
             className="luckysheet-mousedown-cancel"
+            ref={dataVerificationHintBoxRef}
           />
           <div className="luckysheet-cell-copy" />
           <div className="luckysheet-grdblkflowpush" />
@@ -643,12 +774,16 @@ const SheetOverlay: React.FC = () => {
                   className="luckysheet-bottom-controll-row"
                   onMouseDown={(e) => e.stopPropagation()}
                   onMouseUp={(e) => e.stopPropagation()}
-                  onMouseMove={(e) => e.stopPropagation()}
+                  // onMouseMove={(e) => {
+                  //   e.stopPropagation();
+                  //   e.preventDefault();
+                  // }}
                   onKeyDown={(e) => e.stopPropagation()}
                   onKeyUp={(e) => e.stopPropagation()}
                   onKeyPress={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
                   onDoubleClick={(e) => e.stopPropagation()}
+                  tabIndex={0}
                   style={{
                     left: context.scrollLeft,
                     display: context.allowEdit ? "block" : "none",
@@ -659,6 +794,7 @@ const SheetOverlay: React.FC = () => {
                     onClick={() => {
                       handleBottomAddRow();
                     }}
+                    tabIndex={0}
                   >
                     {info.add}
                   </div>
@@ -679,6 +815,7 @@ const SheetOverlay: React.FC = () => {
                         ctx.scrollTop = 0;
                       });
                     }}
+                    tabIndex={0}
                   >
                     {info.backTop}
                   </span>

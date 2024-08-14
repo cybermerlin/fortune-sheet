@@ -9,8 +9,8 @@ import { getFlowdata } from "../../src/context";
 import { groupValuesRefresh } from "../../src";
 
 describe("keyboard", () => {
-  const keypressWithCtrlPressed = (key) => {
-    return new KeyboardEvent("ctrl+[key]", { key, ctrlKey: true });
+  const keypressWithCtrlPressed = (key, code) => {
+    return new KeyboardEvent("ctrl+[key]", { key, ctrlKey: true, code });
   };
   const getContext = () =>
     contextFactory({
@@ -46,10 +46,12 @@ describe("keyboard", () => {
     const fxInput = document.createElement("div");
     const ctx = getContext();
     ctx.luckysheetCellUpdate = [];
+    let cache;
 
     handleWithCtrlOrMetaKey(
       ctx,
-      keypressWithCtrlPressed("b"),
+      cache,
+      keypressWithCtrlPressed("b", "KeyB"),
       cellInput,
       fxInput,
       () => {},
@@ -63,15 +65,20 @@ describe("keyboard", () => {
     const fxInput = document.createElement("div");
     const ctx = getContext();
     const undo = jest.fn();
+    let cache;
     // const redo = jest.fn();
     handleWithCtrlOrMetaKey(
       ctx,
-      keypressWithCtrlPressed("z"),
+      cache,
+      keypressWithCtrlPressed("z", "KeyZ"),
       cellInput,
       fxInput,
       undo
       // redo
     );
+    await new Promise((resolve) => {
+      setTimeout(() => resolve(true), 1);
+    });
     expect(undo).toHaveBeenCalled();
     // handleWithCtrlOrMetaKey(
     //   ctx,
@@ -88,9 +95,11 @@ describe("keyboard", () => {
     const cellInput = document.createElement("div");
     const fxInput = document.createElement("div");
     const ctx = getContext();
+    let cache;
     handleWithCtrlOrMetaKey(
       ctx,
-      keypressWithCtrlPressed("a"),
+      cache,
+      keypressWithCtrlPressed("a", "KeyA"),
       cellInput,
       fxInput,
       () => {},

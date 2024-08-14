@@ -43,6 +43,11 @@ export function getCellValue(
       ret = cellData.v;
     } else if (cellData && cellData.ct && cellData.ct.fa === "yyyy-MM-dd") {
       ret = cellData.m;
+    } else if (cellData.ct?.t === "inlineStr") {
+      ret = cellData.ct.s.reduce(
+        (prev: string, cur: any) => prev + (cur.v ?? ""),
+        ""
+      );
     }
   }
 

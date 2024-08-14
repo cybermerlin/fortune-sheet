@@ -76,7 +76,7 @@ export const SplitColumn: React.FC<{}> = () => {
   }, [context, splitOperate]);
 
   return (
-    <div id="fortunesheet-split-column">
+    <div id="fortune-split-column">
       <div className="title">{splitText.splitTextTitle}</div>
       <div className="splitDelimiters">{splitText.splitDelimiters}</div>
       <div className="splitSymbols" ref={splitSymbols}>
@@ -91,6 +91,7 @@ export const SplitColumn: React.FC<{}> = () => {
                   return getRegStr(regStr, splitSymbols.current?.childNodes);
                 })
               }
+              tabIndex={0}
             />
             <label htmlFor={o.value}>{o.name}</label>
           </div>
@@ -106,6 +107,7 @@ export const SplitColumn: React.FC<{}> = () => {
                 return getRegStr(regStr, splitSymbols.current?.childNodes);
               });
             }}
+            tabIndex={0}
           />
           <label htmlFor="other">{splitText.splitOther}</label>
           <input
@@ -131,6 +133,7 @@ export const SplitColumn: React.FC<{}> = () => {
                 return getRegStr(regStr, splitSymbols.current?.childNodes);
               });
             }}
+            tabIndex={0}
           />
           <label htmlFor="splitsimple">{splitText.splitContinueSymbol}</label>
         </div>
@@ -144,7 +147,7 @@ export const SplitColumn: React.FC<{}> = () => {
                 return (
                   <tr key={index}>
                     {o.map((o1: string) => (
-                      <td>{o1}</td>
+                      <td key={o + o1}>{o1}</td>
                     ))}
                   </tr>
                 );
@@ -163,6 +166,7 @@ export const SplitColumn: React.FC<{}> = () => {
         onClick={() => {
           certainBtn();
         }}
+        tabIndex={0}
       >
         {button.confirm}
       </div>
@@ -171,6 +175,7 @@ export const SplitColumn: React.FC<{}> = () => {
         onClick={() => {
           hideDialog();
         }}
+        tabIndex={0}
       >
         {button.cancel}
       </div>

@@ -155,7 +155,7 @@ const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
       }}
       onDrop={onDrop}
       onDragStart={onDragStart}
-      draggable={context.allowEdit}
+      draggable={context.allowEdit && !editing}
       key={sheet.id}
       ref={containerRef}
       className={
@@ -177,21 +177,26 @@ const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             luckysheet_select_save: draftCtx.luckysheet_select_save,
             luckysheet_selection_range: draftCtx.luckysheet_selection_range,
           };
+          draftCtx.dataVerificationDropDownList = false;
           draftCtx.currentSheetId = sheet.id!;
+          draftCtx.zoomRatio = sheet.zoomRatio || 1;
           cancelActiveImgItem(draftCtx, refs.globalCache);
           cancelNormalSelected(draftCtx);
         });
       }}
+      tabIndex={0}
       onContextMenu={(e) => {
         if (isDropPlaceholder) return;
         const rect = refs.workbookContainer.current!.getBoundingClientRect();
         const { pageX, pageY } = e;
         setContext((ctx) => {
           // 右击的时候先进行跳转
+          ctx.dataVerificationDropDownList = false;
           ctx.currentSheetId = sheet.id!;
+          ctx.zoomRatio = sheet.zoomRatio || 1;
           ctx.sheetTabContextMenu = {
-            x: pageX - rect.left,
-            y: pageY - rect.top,
+            x: pageX - rect.left - window.scrollX,
+            y: pageY - rect.top - window.scrollY,
             sheet,
             onRename: () => setEditing(true),
           };
@@ -214,36 +219,36 @@ const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
         style={dragOver ? { pointerEvents: "none" } : {}}
       >
         {sheet.name}
-        <div
-          className="luckysheet-sheets-item-function"
-          onMouseEnter={() => setSvgColor("#5c5c5c")}
-          onMouseLeave={() => setSvgColor("#c3c3c3")}
-          onClick={(e) => {
-            if (isDropPlaceholder || context.allowEdit === false) return;
-            const rect =
-              refs.workbookContainer.current!.getBoundingClientRect();
-            const { pageX, pageY } = e;
-            setContext((ctx) => {
-              // 右击的时候先进行跳转
-              ctx.currentSheetId = sheet.id!;
-              ctx.sheetTabContextMenu = {
-                x: pageX - rect.left,
-                y: pageY - rect.top,
-                sheet,
-                onRename: () => setEditing(true),
-              };
-            });
-          }}
-        >
-          <SVGIcon name="downArrow" width={12} style={{ fill: svgColor }} />
-        </div>
-        {!!sheet.color && (
-          <div
-            className="luckysheet-sheets-item-color"
-            style={{ background: sheet.color }}
-          />
-        )}
       </span>
+      <span
+        className="luckysheet-sheets-item-function"
+        onMouseEnter={() => setSvgColor("#5c5c5c")}
+        onMouseLeave={() => setSvgColor("#c3c3c3")}
+        onClick={(e) => {
+          if (isDropPlaceholder || context.allowEdit === false) return;
+          const rect = refs.workbookContainer.current!.getBoundingClientRect();
+          const { pageX, pageY } = e;
+          setContext((ctx) => {
+            // 右击的时候先进行跳转
+            ctx.currentSheetId = sheet.id!;
+            ctx.sheetTabContextMenu = {
+              x: pageX - rect.left - window.scrollX,
+              y: pageY - rect.top - window.scrollY,
+              sheet,
+              onRename: () => setEditing(true),
+            };
+          });
+        }}
+        tabIndex={0}
+      >
+        <SVGIcon name="downArrow" width={12} style={{ fill: svgColor }} />
+      </span>
+      {!!sheet.color && (
+        <div
+          className="luckysheet-sheets-item-color"
+          style={{ background: sheet.color }}
+        />
+      )}
     </div>
   );
 };

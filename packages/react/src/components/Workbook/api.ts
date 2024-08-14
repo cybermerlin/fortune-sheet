@@ -15,12 +15,11 @@ import {
   SingleRange,
   createFilterOptions,
   getSheetIndex,
-  GlobalCache,
-  inverseRowColOptions,
-  PatchOptions,
   Sheet,
+  CellMatrix,
+  CellWithRowAndCol,
 } from "@fortune-sheet/core";
-import produce, { applyPatches, Patch } from "immer";
+import { applyPatches } from "immer";
 import _ from "lodash";
 import { SetContextOptions } from "../../context";
 
@@ -30,13 +29,8 @@ export function generateAPIs(
     recipe: (ctx: Context) => void,
     options?: SetContextOptions
   ) => void,
-  emitOp: (
-    ctx: Context,
-    patches: Patch[],
-    patchOptions: PatchOptions | undefined
-  ) => void,
-  setContextWithoutProduce: (ctx: Context) => void,
-  globalCache: GlobalCache,
+  handleUndo: () => void,
+  handleRedo: () => void,
   settings: Required<Settings>,
   cellInput: HTMLDivElement | null,
   scrollbarX: HTMLDivElement | null,
@@ -50,17 +44,13 @@ export function generateAPIs(
           if (specialOps.length > 0) {
             const [specialOp] = specialOps;
             if (specialOp.op === "insertRowCol") {
-              ctx_ = produce(ctx_, (draftCtx) => {
-                try {
-                  insertRowCol(draftCtx, specialOp.value);
-                } catch (e: any) {
-                  console.error(e);
-                }
-              });
+              try {
+                insertRowCol(ctx_, specialOp.value, false);
+              } catch (e: any) {
+                console.error(e);
+              }
             } else if (specialOp.op === "deleteRowCol") {
-              ctx_ = produce(ctx_, (draftCtx) => {
-                deleteRowCol(draftCtx, specialOp.value);
-              });
+              deleteRowCol(ctx_, specialOp.value);
             } else if (specialOp.op === "addSheet") {
               const name = patches.filter(
                 (path) => path.path[0] === "name"
@@ -182,15 +172,20 @@ export function generateAPIs(
 
     setRowHeight: (
       rowInfo: Record<string, number>,
-      options: api.CommonOptions = {}
-    ) => setContext((draftCtx) => api.setRowHeight(draftCtx, rowInfo, options)),
+      options: api.CommonOptions = {},
+      custom: boolean = false
+    ) =>
+      setContext((draftCtx) =>
+        api.setRowHeight(draftCtx, rowInfo, options, custom)
+      ),
 
     setColumnWidth: (
       columnInfo: Record<string, number>,
-      options: api.CommonOptions = {}
+      options: api.CommonOptions = {},
+      custom: boolean = false
     ) =>
       setContext((draftCtx) =>
-        api.setColumnWidth(draftCtx, columnInfo, options)
+        api.setColumnWidth(draftCtx, columnInfo, options, custom)
       ),
 
     getRowHeight: (rows: number[], options: api.CommonOptions = {}) =>
@@ -300,37 +295,8 @@ export function generateAPIs(
       });
     },
 
-    handleUndo: () => {
-      const history = globalCache.undoList.pop();
-      if (history) {
-        // @ts-ignore
-        setContextWithoutProduce((draftCtx: Context) => {
-          const newContext = applyPatches(
-            draftCtx as Context,
-            history.inversePatches
-          );
-          const inversedOptions = inverseRowColOptions(history.options);
-          if (inversedOptions?.insertRowColOp) {
-            inversedOptions.restoreDeletedCells = true;
-          }
-          emitOp(newContext, history.inversePatches, inversedOptions);
-          return newContext;
-        });
-      }
-    },
-
-    handleRedo: () => {
-      const history = globalCache.redoList.pop();
-      if (history) {
-        // @ts-ignore
-        setContextWithoutProduce((draftCtx) => {
-          const newContext = applyPatches(draftCtx, history.patches);
-          globalCache.undoList.push(history);
-          emitOp(newContext, history.patches, history.options);
-          return newContext;
-        });
-      }
-    },
+    handleUndo,
+    handleRedo,
 
     calculateFormula: () => {
       setContext((draftCtx) => {
@@ -338,6 +304,18 @@ export function generateAPIs(
           api.calculateSheetFromula(draftCtx, sheet_obj.id as string);
         });
       });
+    },
+
+    dataToCelldata: (data: CellMatrix | undefined) => {
+      return api.dataToCelldata(data);
+    },
+
+    celldataToData: (
+      celldata: CellWithRowAndCol[],
+      rowCount?: number,
+      colCount?: number
+    ) => {
+      return api.celldataToData(celldata, rowCount, colCount);
     },
   };
 }

@@ -45,7 +45,8 @@ export function insertRowCol(
     count: number;
     direction: "lefttop" | "rightbottom";
     id: string;
-  }
+  },
+  changeSelection: boolean = true
 ) {
   let { count, id } = op;
   const { type, index, direction } = op;
@@ -72,20 +73,29 @@ export function insertRowCol(
   const d = file.data;
   if (!d) return;
 
+  const cfg = file.config || {};
+
+  if (changeSelection) {
+    if (type === "row") {
+      if (cfg.rowReadOnly?.[index]) {
+        throw new Error("readOnly");
+      }
+    } else {
+      if (cfg.colReadOnly?.[index]) {
+        throw new Error("readOnly");
+      }
+    }
+  }
+
   if (type === "row" && d.length + count >= 10000) {
-    throw new Error(
-      "This action would increase the number of rows in the workbook above the limit of 10000."
-    );
+    throw new Error("maxExceeded");
   }
 
   if (type === "column" && d[0] && d[0].length + count >= 1000) {
-    throw new Error(
-      "This action would increase the number of columns in the workbook above the limit of 1000."
-    );
+    throw new Error("maxExceeded");
   }
 
   count = Math.floor(count);
-  const cfg = file.config || {};
 
   // 合并单元格配置变动
   if (cfg.merge == null) {
@@ -156,17 +166,28 @@ export function insertRowCol(
   cfg.merge = merge_new;
 
   // 公式配置变动
-  const { calcChain } = file;
   const newCalcChain = [];
-  if (calcChain != null && calcChain.length > 0) {
-    for (let i = 0; i < calcChain.length; i += 1) {
-      const calc: any = _.cloneDeep(calcChain[i]);
+  for (
+    let SheetIndex = 0;
+    SheetIndex < ctx.luckysheetfile.length;
+    SheetIndex += 1
+  ) {
+    if (
+      _.isNil(ctx.luckysheetfile[SheetIndex].calcChain) ||
+      ctx.luckysheetfile.length === 0
+    ) {
+      continue;
+    }
+    const { calcChain } = ctx.luckysheetfile[SheetIndex];
+    const { data } = ctx.luckysheetfile[SheetIndex];
+    for (let i = 0; i < calcChain!.length; i += 1) {
+      const calc: any = _.cloneDeep(calcChain![i]);
       const calc_r = calc.r;
       const calc_c = calc.c;
       const calc_i = calc.id;
       const calc_funcStr = getcellFormula(ctx, calc_r, calc_c, calc_i);
 
-      if (type === "row") {
+      if (type === "row" && SheetIndex === curOrder) {
         const functionStr = `=${functionStrChange(
           calc_funcStr,
           "add",
@@ -191,7 +212,20 @@ export function insertRowCol(
         }
 
         newCalcChain.push(calc);
-      } else if (type === "column") {
+      } else if (type === "row") {
+        const functionStr = `=${functionStrChange(
+          calc_funcStr,
+          "add",
+          "row",
+          direction,
+          index,
+          count
+        )}`;
+
+        if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
+          data![calc_r]![calc_c]!.f = functionStr;
+        }
+      } else if (type === "column" && SheetIndex === curOrder) {
         const functionStr = `=${functionStrChange(
           calc_funcStr,
           "add",
@@ -216,6 +250,19 @@ export function insertRowCol(
         }
 
         newCalcChain.push(calc);
+      } else if (type === "column") {
+        const functionStr = `=${functionStrChange(
+          calc_funcStr,
+          "add",
+          "col",
+          direction,
+          index,
+          count
+        )}`;
+
+        if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
+          data![calc_r]![calc_c]!.f = functionStr;
+        }
       }
     }
   }
@@ -570,6 +617,7 @@ export function insertRowCol(
     // 行高配置变动
     if (cfg.rowlen != null) {
       const rowlen_new: any = {};
+      const rowReadOnly_new: Record<number, number> = {};
 
       _.forEach(cfg.rowlen, (v, rstr) => {
         const r = parseFloat(rstr);
@@ -586,8 +634,63 @@ export function insertRowCol(
           rowlen_new[r + count] = cfg.rowlen![r];
         }
       });
+      _.forEach(cfg.rowReadOnly, (v, rstr) => {
+        const r = parseFloat(rstr);
+        if (r < index) {
+          rowReadOnly_new[r] = cfg.rowReadOnly![r];
+        } else if (r > index) {
+          rowReadOnly_new[r + count] = cfg.rowReadOnly![r];
+        }
+      });
 
       cfg.rowlen = rowlen_new;
+      cfg.rowReadOnly = rowReadOnly_new;
+    }
+
+    // 自定义行高配置变动
+    if (cfg.customHeight != null) {
+      const customHeight_new: any = {};
+
+      _.forEach(cfg.customHeight, (v, rstr) => {
+        const r = parseFloat(rstr);
+
+        if (r < index) {
+          customHeight_new[r] = cfg.customHeight![r];
+        } else if (r === index) {
+          if (direction === "lefttop") {
+            customHeight_new[r + count] = cfg.customHeight![r];
+          } else if (direction === "rightbottom") {
+            customHeight_new[r] = cfg.customHeight![r];
+          }
+        } else {
+          customHeight_new[r + count] = cfg.customHeight![r];
+        }
+      });
+
+      cfg.customHeight = customHeight_new;
+    }
+
+    // 自定义行高配置变动
+    if (cfg.customHeight != null) {
+      const customHeight_new: any = {};
+
+      _.forEach(cfg.customHeight, (v, rstr) => {
+        const r = parseFloat(rstr);
+
+        if (r < index) {
+          customHeight_new[r] = cfg.customHeight![r];
+        } else if (r === index) {
+          if (direction === "lefttop") {
+            customHeight_new[r + count] = cfg.customHeight![r];
+          } else if (direction === "rightbottom") {
+            customHeight_new[r] = cfg.customHeight![r];
+          }
+        } else {
+          customHeight_new[r + count] = cfg.customHeight![r];
+        }
+      });
+
+      cfg.customHeight = customHeight_new;
     }
 
     // 隐藏行配置变动
@@ -619,12 +722,18 @@ export function insertRowCol(
     for (let c = 0; c < d[0].length; c += 1) {
       const cell = curRow[c];
       let templateCell = null;
-      if (cell != null) {
-        templateCell = { ...cell, v: "", m: "" };
+      if (cell?.mc && (direction === "rightbottom" || index !== cell.mc.r)) {
+        if (cell.mc.rs) {
+          cell.mc.rs += count;
+        }
+        templateCell = { ...cell };
         if (!d?.[index + 1]?.[c]?.mc) {
           templateCell.mc = undefined;
         }
+        delete templateCell.v;
+        delete templateCell.m;
         delete templateCell.ps;
+        delete templateCell.f;
       }
       row.push(templateCell);
     }
@@ -741,9 +850,10 @@ export function insertRowCol(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     type1 = "c";
 
-    // 行高配置变动
+    // 列宽配置变动
     if (cfg.columnlen != null) {
       const columnlen_new: any = {};
+      const columnReadOnly_new: any = {};
 
       _.forEach(cfg.columnlen, (v, cstr) => {
         const c = parseFloat(cstr);
@@ -761,7 +871,63 @@ export function insertRowCol(
         }
       });
 
+      _.forEach(cfg.colReadOnly, (v, cstr) => {
+        const c = parseFloat(cstr);
+        if (c < index) {
+          columnReadOnly_new[c] = cfg.colReadOnly![c];
+        } else if (c > index) {
+          columnReadOnly_new[c + count] = cfg.colReadOnly![c];
+        }
+      });
+
       cfg.columnlen = columnlen_new;
+      cfg.colReadOnly = columnReadOnly_new;
+    }
+
+    // 自定义列宽配置变动
+    if (cfg.customWidth != null) {
+      const customWidth_new: any = {};
+
+      _.forEach(cfg.customWidth, (v, cstr) => {
+        const c = parseFloat(cstr);
+
+        if (c < index) {
+          customWidth_new[c] = cfg.customWidth![c];
+        } else if (c === index) {
+          if (direction === "lefttop") {
+            customWidth_new[c + count] = cfg.customWidth![c];
+          } else if (direction === "rightbottom") {
+            customWidth_new[c] = cfg.customWidth![c];
+          }
+        } else {
+          customWidth_new[c + count] = cfg.customWidth![c];
+        }
+      });
+
+      cfg.customWidth = customWidth_new;
+    }
+
+    // 自定义列宽配置变动
+    if (cfg.customWidth != null) {
+      const customWidth_new: any = {};
+
+      _.forEach(cfg.customWidth, (v, cstr) => {
+        const c = parseFloat(cstr);
+
+        if (c < index) {
+          customWidth_new[c] = cfg.customWidth![c];
+        } else if (c === index) {
+          if (direction === "lefttop") {
+            customWidth_new[c + count] = cfg.customWidth![c];
+          } else if (direction === "rightbottom") {
+            customWidth_new[c] = cfg.customWidth![c];
+          }
+        } else {
+          customWidth_new[c + count] = cfg.customWidth![c];
+        }
+      });
+
+      cfg.customWidth = customWidth_new;
     }
 
     // 隐藏列配置变动
@@ -793,12 +959,18 @@ export function insertRowCol(
     for (let r = 0; r < d.length; r += 1) {
       const cell = curd[r][index];
       let templateCell = null;
-      if (cell != null) {
-        templateCell = { ...cell, v: "", m: "" };
+      if (cell?.mc && (direction === "rightbottom" || index !== cell.mc.c)) {
+        if (cell.mc.cs) {
+          cell.mc.cs += count;
+        }
+        templateCell = { ...cell };
         if (!curd?.[r]?.[index + 1]?.mc) {
           templateCell.mc = undefined;
         }
+        delete templateCell.v;
+        delete templateCell.m;
         delete templateCell.ps;
+        delete templateCell.f;
       }
       col.push(templateCell);
     }
@@ -961,18 +1133,22 @@ export function insertRowCol(
         { row: [index + 1, index + count], column: [0, d[0].length - 1] },
       ];
     }
+    file.row = file.data.length;
   } else {
     if (direction === "lefttop") {
       range = [{ row: [0, d.length - 1], column: [index, index + count - 1] }];
     } else {
       range = [{ row: [0, d.length - 1], column: [index + 1, index + count] }];
     }
+    file.column = file.data[0]?.length;
   }
 
-  file.luckysheet_select_save = range;
-  if (file.id === ctx.currentSheetId) {
-    ctx.luckysheet_select_save = range;
-    // selectHightlightShow();
+  if (changeSelection) {
+    file.luckysheet_select_save = range;
+    if (file.id === ctx.currentSheetId) {
+      ctx.luckysheet_select_save = range;
+      // selectHightlightShow();
+    }
   }
 
   refreshLocalMergeData(merge_new, file);
@@ -1030,6 +1206,20 @@ export function deleteRowCol(
 
   const file = ctx.luckysheetfile[curOrder];
   if (!file) return;
+  const cfg = file.config || {};
+  if (type === "row") {
+    for (let r = start; r <= end; r += 1) {
+      if (cfg.rowReadOnly?.[r]) {
+        throw new Error("readOnly");
+      }
+    }
+  } else {
+    for (let c = start; c <= end; c += 1) {
+      if (cfg.colReadOnly?.[c]) {
+        throw new Error("readOnly");
+      }
+    }
+  }
 
   const d = file.data;
   if (!d) return;
@@ -1065,7 +1255,6 @@ export function deleteRowCol(
   }
 
   const slen = end - start + 1;
-  const cfg = file.config || {};
 
   // 合并单元格配置变动
   if (cfg.merge == null) {
@@ -1126,17 +1315,28 @@ export function deleteRowCol(
   cfg.merge = merge_new;
 
   // 公式配置变动
-  const { calcChain } = file;
   const newCalcChain = [];
-  if (calcChain != null && calcChain.length > 0) {
-    for (let i = 0; i < calcChain.length; i += 1) {
-      const calc: any = _.cloneDeep(calcChain[i]);
+  for (
+    let SheetIndex = 0;
+    SheetIndex < ctx.luckysheetfile.length;
+    SheetIndex += 1
+  ) {
+    if (
+      _.isNil(ctx.luckysheetfile[SheetIndex].calcChain) ||
+      ctx.luckysheetfile.length === 0
+    ) {
+      continue;
+    }
+    const { calcChain } = ctx.luckysheetfile[SheetIndex];
+    const { data } = ctx.luckysheetfile[SheetIndex];
+    for (let i = 0; i < calcChain!.length; i += 1) {
+      const calc: any = _.cloneDeep(calcChain![i]);
       const calc_r = calc.r;
       const calc_c = calc.c;
       const calc_i = calc.id;
       const calc_funcStr = getcellFormula(ctx, calc_r, calc_c, calc_i);
 
-      if (type === "row") {
+      if (type === "row" && SheetIndex === curOrder) {
         if (calc_r < start || calc_r > end) {
           const functionStr = `=${functionStrChange(
             calc_funcStr,
@@ -1147,8 +1347,8 @@ export function deleteRowCol(
             slen
           )}`;
 
-          if (d[calc_r]?.[calc_c]?.f === calc_funcStr) {
-            d[calc_r]![calc_c]!.f = functionStr;
+          if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
+            data![calc_r]![calc_c]!.f = functionStr;
           }
 
           if (calc_r > end) {
@@ -1157,7 +1357,20 @@ export function deleteRowCol(
 
           newCalcChain.push(calc);
         }
-      } else if (type === "column") {
+      } else if (type === "row") {
+        const functionStr = `=${functionStrChange(
+          calc_funcStr,
+          "del",
+          "row",
+          null,
+          start,
+          slen
+        )}`;
+
+        if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
+          data![calc_r]![calc_c]!.f = functionStr;
+        }
+      } else if (type === "column" && SheetIndex === curOrder) {
         if (calc_c < start || calc_c > end) {
           const functionStr = `=${functionStrChange(
             calc_funcStr,
@@ -1168,8 +1381,8 @@ export function deleteRowCol(
             slen
           )}`;
 
-          if (d[calc_r]?.[calc_c]?.f === calc_funcStr) {
-            d[calc_r]![calc_c]!.f = functionStr;
+          if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
+            data![calc_r]![calc_c]!.f = functionStr;
           }
 
           if (calc_c > end) {
@@ -1177,6 +1390,19 @@ export function deleteRowCol(
           }
 
           newCalcChain.push(calc);
+        }
+      } else if (type === "column") {
+        const functionStr = `=${functionStrChange(
+          calc_funcStr,
+          "del",
+          "col",
+          null,
+          start,
+          slen
+        )}`;
+
+        if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
+          data![calc_r]![calc_c]!.f = functionStr;
         }
       }
     }
@@ -1533,6 +1759,7 @@ export function deleteRowCol(
     }
 
     const rowlen_new: any = {};
+    const rowReadOnly_new: Record<number, number> = {};
     _.forEach(cfg.rowlen, (v, rstr) => {
       const r = parseFloat(rstr);
       if (r < start) {
@@ -1541,8 +1768,17 @@ export function deleteRowCol(
         rowlen_new[r - slen] = cfg.rowlen![r];
       }
     });
+    _.forEach(cfg.rowReadOnly, (v, rstr) => {
+      const r = parseFloat(rstr);
+      if (r < start) {
+        rowReadOnly_new[r] = cfg.rowReadOnly![r];
+      } else if (r > end) {
+        rowReadOnly_new[r - slen] = cfg.rowReadOnly![r];
+      }
+    });
 
     cfg.rowlen = rowlen_new;
+    cfg.rowReadOnly = rowReadOnly_new;
 
     // 隐藏行配置变动
     if (cfg.rowhidden == null) {
@@ -1558,6 +1794,40 @@ export function deleteRowCol(
         rowhidden_new[r - slen] = cfg.rowhidden![r];
       }
     });
+
+    // 自定义行高配置变动
+    if (cfg.customHeight == null) {
+      cfg.customHeight = {};
+
+      const customHeight_new: any = {};
+      _.forEach(cfg.customHeight, (v, rstr) => {
+        const r = parseFloat(rstr);
+        if (r < start) {
+          customHeight_new[r] = cfg.customHeight![r];
+        } else if (r > end) {
+          customHeight_new[r - slen] = cfg.customHeight![r];
+        }
+      });
+
+      cfg.customHeight = customHeight_new;
+    }
+
+    // 自定义行高配置变动
+    if (cfg.customHeight == null) {
+      cfg.customHeight = {};
+
+      const customHeight_new: any = {};
+      _.forEach(cfg.customHeight, (v, rstr) => {
+        const r = parseFloat(rstr);
+        if (r < start) {
+          customHeight_new[r] = cfg.customHeight![r];
+        } else if (r > end) {
+          customHeight_new[r - slen] = cfg.customHeight![r];
+        }
+      });
+
+      cfg.customHeight = customHeight_new;
+    }
 
     cfg.rowhidden = rowhidden_new;
 
@@ -1639,14 +1909,8 @@ export function deleteRowCol(
     // 删除选中行
     d.splice(start, slen);
 
-    // 删除多少行，增加多少行空白行
-    for (let r = 0; r < slen; r += 1) {
-      const row = [];
-      for (let c = 0; c < d[0].length; c += 1) {
-        row.push(null);
-      }
-      d.push(row);
-    }
+    // 删除行后，调整行数
+    file.row = d.length;
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     type1 = "c";
@@ -1657,6 +1921,7 @@ export function deleteRowCol(
     }
 
     const columnlen_new: any = {};
+    const columnReadOnly_new: any = {};
     _.forEach(cfg.columnlen, (v, cstr) => {
       const c = parseFloat(cstr);
       if (c < start) {
@@ -1665,8 +1930,35 @@ export function deleteRowCol(
         columnlen_new[c - slen] = cfg.columnlen![c];
       }
     });
+    _.forEach(cfg.colReadOnly, (v, cstr) => {
+      const c = parseFloat(cstr);
+      if (c < start) {
+        columnReadOnly_new[c] = cfg.colReadOnly![c];
+      } else if (c > end) {
+        columnReadOnly_new[c - slen] = cfg.colReadOnly![c];
+      }
+    });
 
     cfg.columnlen = columnlen_new;
+    cfg.colReadOnly = columnReadOnly_new;
+
+    // 自定义列宽配置变动
+    if (cfg.customWidth == null) {
+      cfg.customWidth = {};
+
+      const customWidth_new: any = {};
+      _.forEach(cfg.customWidth, (v, rstr) => {
+        const r = parseFloat(rstr);
+        if (r < start) {
+          customWidth_new[r] = cfg.customWidth![r];
+        } else if (r > end) {
+          customWidth_new[r - slen] = cfg.customWidth![r];
+        }
+      });
+
+      cfg.customWidth = customWidth_new;
+    }
+    cfg.colReadOnly = columnReadOnly_new;
 
     // 隐藏列配置变动
     if (cfg.colhidden == null) {
@@ -1744,21 +2036,17 @@ export function deleteRowCol(
       cfg.borderInfo = borderInfo;
     }
 
-    // 空白列模板
-    const addcol = [];
-    for (let r = 0; r < slen; r += 1) {
-      addcol.push(null);
-    }
-
     for (let r = 0; r < d.length; r += 1) {
-      const row = _.clone(d[r]);
-
       // 删除选中列
-      row.splice(start, slen);
-
-      d[r] = row.concat(addcol);
+      d[r].splice(start, slen);
     }
+
+    // 删除列后，调整列数
+    file.column = d[0]?.length;
   }
+
+  // 选中元素被删取消选区
+  ctx.luckysheet_select_save = undefined;
 
   // 修改当前sheet页时刷新
   file.data = d;
@@ -1936,7 +2224,7 @@ export function isShowHidenCR(ctx: Context): boolean {
     return false;
   // 如果当先选区处在隐藏行列的时候则不可编辑
   if (!!ctx.config.colhidden && _.size(ctx.config.colhidden) >= 1) {
-    const ctxColumn = ctx.luckysheet_select_save[0].column[0];
+    const ctxColumn = ctx.luckysheet_select_save[0]?.column?.[0];
     const isHidenColumn =
       Object.keys(ctx.config.colhidden).findIndex((o) => {
         return ctxColumn === parseInt(o, 10);
@@ -1946,7 +2234,7 @@ export function isShowHidenCR(ctx: Context): boolean {
     }
   }
   if (!!ctx.config.rowhidden && _.size(ctx.config.rowhidden) >= 1) {
-    const ctxRow = ctx.luckysheet_select_save[0].row[0];
+    const ctxRow = ctx.luckysheet_select_save[0]?.row?.[0];
     const isHidenRow =
       Object.keys(ctx.config.rowhidden).findIndex((o) => {
         return ctxRow === parseInt(o, 10);

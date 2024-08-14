@@ -13,10 +13,11 @@ import { hasPartMC } from "./validation";
 import { locale } from "../locale";
 import { getBorderInfoCompute } from "./border";
 import { normalizeSelection } from "./selection";
-import { getSheetIndex } from "../utils";
+import { getSheetIndex, isAllowEdit } from "../utils";
 import { cfSplitRange } from "./conditionalFormat";
 import { GlobalCache } from "../types";
 import { jfrefreshgrid } from "./refresh";
+import { CFSplitRange } from "./ConditionFormat";
 
 const dragCellThreshold = 8;
 
@@ -46,7 +47,8 @@ export function onCellsMoveStart(
   container: HTMLDivElement
 ) {
   // if (isEditMode() || ctx.allowEdit === false) {
-  if (ctx.allowEdit === false) {
+  const allowEdit = isAllowEdit(ctx);
+  if (allowEdit === false) {
     // 此模式下禁用选区拖动
     return;
   }
@@ -217,6 +219,14 @@ export function onCellsMoveEnd(
     column: [, , col_index],
   } = getCellLocationByMouse(ctx, e, scrollbarX, scrollbarY, container);
 
+  const allowEdit = isAllowEdit(ctx, [
+    {
+      row: [row_index, row_index],
+      column: [col_index, col_index],
+    },
+  ]);
+  if (!allowEdit) return;
+
   const row_index_original = ctx.luckysheet_cell_selected_move_index[0];
   const col_index_original = ctx.luckysheet_cell_selected_move_index[1];
 
@@ -311,8 +321,16 @@ export function onCellsMoveEnd(
 
   const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
 
+  const hyperLinkList: Record<
+    string,
+    {
+      linkType: string;
+      linkAddress: string;
+    }
+  > = {};
   // 删除原本位置的数据
   // const RowlChange = null;
+  const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
   for (let r = last.row[0]; r <= last.row[1]; r += 1) {
     // if (r in cfg.rowlen) {
     //   RowlChange = true;
@@ -329,9 +347,15 @@ export function onCellsMoveEnd(
       }
 
       d[r][c] = null;
+      if (ctx.luckysheetfile[index].hyperlink?.[`${r}_${c}`]) {
+        hyperLinkList[`${r}_${c}`] =
+          ctx.luckysheetfile[index].hyperlink?.[`${r}_${c}`]!;
+        delete ctx.luckysheetfile[
+          getSheetIndex(ctx, ctx.currentSheetId) as number
+        ].hyperlink?.[`${r}_${c}`];
+      }
     }
   }
-
   // 边框
   if (cfg.borderInfo && cfg.borderInfo.length > 0) {
     const borderInfo = [];
@@ -339,7 +363,10 @@ export function onCellsMoveEnd(
     for (let i = 0; i < cfg.borderInfo.length; i += 1) {
       const bd_rangeType = cfg.borderInfo[i].rangeType;
 
-      if (bd_rangeType === "range") {
+      if (
+        bd_rangeType === "range" &&
+        cfg.borderInfo[i].borderType !== "border-slash"
+      ) {
         const bd_range = cfg.borderInfo[i].range;
         let bd_emptyRange: any[] = [];
         for (let j = 0; j < bd_range.length; j += 1) {
@@ -369,6 +396,17 @@ export function onCellsMoveEnd(
         ) {
           borderInfo.push(cfg.borderInfo[i]);
         }
+      } else if (
+        bd_rangeType === "range" &&
+        cfg.borderInfo[i].borderType === "border-slash" &&
+        !(
+          cfg.borderInfo[i].range[0].row[0] >= last.row[0] &&
+          cfg.borderInfo[i].range[0].row[0] <= last.row[1] &&
+          cfg.borderInfo[i].range[0].column[0] >= last.column[0] &&
+          cfg.borderInfo[i].range[0].column[0] <= last.column[1]
+        )
+      ) {
+        borderInfo.push(cfg.borderInfo[i]);
       }
     }
 
@@ -378,7 +416,10 @@ export function onCellsMoveEnd(
   const offsetMC: Record<string, any> = {};
   for (let r = 0; r < data.length; r += 1) {
     for (let c = 0; c < data[0].length; c += 1) {
-      if (borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`]) {
+      if (
+        borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`] &&
+        !borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].s
+      ) {
         const bd_obj = {
           rangeType: "cell",
           value: {
@@ -389,6 +430,28 @@ export function onCellsMoveEnd(
             t: borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].t,
             b: borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].b,
           },
+        };
+
+        if (cfg.borderInfo == null) {
+          cfg.borderInfo = [];
+        }
+
+        cfg.borderInfo.push(bd_obj);
+      } else if (
+        borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`]
+      ) {
+        const bd_obj = {
+          rangeType: "range",
+          borderType: "border-slash",
+          color:
+            borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].s
+              .color!,
+          style:
+            borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].s
+              .style!,
+          range: normalizeSelection(ctx, [
+            { row: [r + row_s, r + row_s], column: [c + col_s, c + col_s] },
+          ]),
         };
 
         if (cfg.borderInfo == null) {
@@ -418,6 +481,13 @@ export function onCellsMoveEnd(
         }
       }
       d[r + row_s][c + col_s] = value;
+      if (hyperLinkList?.[`${r + last.row[0]}_${c + last.column[0]}`]) {
+        ctx.luckysheetfile[index].hyperlink![`${r + row_s}_${c + col_s}`] =
+          hyperLinkList?.[`${r + last.row[0]}_${c + last.column[0]}`] as {
+            linkType: string;
+            linkAddress: string;
+          };
+      }
     }
   }
 
@@ -425,30 +495,26 @@ export function onCellsMoveEnd(
   //   cfg = rowlenByRange(d, last.row[0], last.row[1], cfg);
   //   cfg = rowlenByRange(d, row_s, row_e, cfg);
   // }
-
   // 条件格式
-  // const cdformat = $.extend(
-  //   true,
-  //   [],
-  //   ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetIndex)]
-  //     .luckysheet_conditionformat_save
-  // );
-  // if (cdformat != null && cdformat.length > 0) {
-  //   for (let i = 0; i < cdformat.length; i += 1) {
-  //     const cdformat_cellrange = cdformat[i].cellrange;
-  //     let emptyRange = [];
-  //     for (let j = 0; j < cdformat_cellrange.length; j += 1) {
-  //       const range = conditionformat.CFSplitRange(
-  //         cdformat_cellrange[j],
-  //         { row: last.row, column: last.column },
-  //         { row: [row_s, row_e], column: [col_s, col_e] },
-  //         "allPart"
-  //       );
-  //       emptyRange = emptyRange.concat(range);
-  //     }
-  //     cdformat[i].cellrange = emptyRange;
-  //   }
-  // }
+  const cdformat =
+    ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number]
+      .luckysheet_conditionformat_save ?? [];
+  if (cdformat != null && cdformat.length > 0) {
+    for (let i = 0; i < cdformat.length; i += 1) {
+      const cdformat_cellrange = cdformat[i].cellrange;
+      let emptyRange: any = [];
+      for (let j = 0; j < cdformat_cellrange.length; j += 1) {
+        const range = CFSplitRange(
+          cdformat_cellrange[j],
+          { row: last.row, column: last.column },
+          { row: [row_s, row_e], column: [col_s, col_e] },
+          "allPart"
+        );
+        emptyRange = emptyRange.concat(range);
+      }
+      cdformat[i].cellrange = emptyRange;
+    }
+  }
 
   let rf;
   if (

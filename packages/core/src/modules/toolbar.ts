@@ -3,7 +3,7 @@ import { mergeCells } from "./merge";
 import { Context, getFlowdata } from "../context";
 // import { locale } from "../locale";
 import { Cell, CellMatrix, GlobalCache } from "../types";
-import { getSheetIndex } from "../utils";
+import { getSheetIndex, isAllowEdit } from "../utils";
 import {
   getRangetxt,
   isAllSelectedCellsInStatus,
@@ -26,7 +26,11 @@ import {
   updateInlineStringFormatOutside,
 } from "./inline-string";
 import { colLocationByIndex, rowLocationByIndex } from "./location";
-import { selectionCopyShow, selectIsOverlap } from "./selection";
+import {
+  normalizeSelection,
+  selectionCopyShow,
+  selectIsOverlap,
+} from "./selection";
 import { sortSelection } from "./sort";
 import {
   hasPartMC,
@@ -35,6 +39,8 @@ import {
   isRealNum,
 } from "./validation";
 import { showLinkCard } from "./hyperlink";
+import { cfSplitRange } from "./conditionalFormat";
+import { getCellTextInfo } from "./text";
 
 type ToolbarItemClickHandler = (
   ctx: Context,
@@ -52,7 +58,8 @@ export function updateFormatCell(
   row_st: number,
   row_ed: number,
   col_st: number,
-  col_ed: number
+  col_ed: number,
+  canvas?: CanvasRenderingContext2D
 ) {
   if (_.isNil(d) || _.isNil(attr)) {
     return;
@@ -160,6 +167,10 @@ export function updateFormatCell(
       }
     }
 
+    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
+    if (sheetIndex == null) {
+      return;
+    }
     for (let r = row_st; r <= row_ed; r += 1) {
       if (!_.isNil(ctx.config.rowhidden) && !_.isNil(ctx.config.rowhidden[r])) {
         continue;
@@ -176,6 +187,32 @@ export function updateFormatCell(
           // @ts-ignore
           value[attr] = foucsStatus;
           // }
+          ctx.luckysheetfile[sheetIndex].config ||= {};
+          const cfg = ctx.luckysheetfile[sheetIndex].config!;
+          const cellWidth =
+            cfg.columnlen?.[c] ||
+            ctx.luckysheetfile[sheetIndex].defaultColWidth;
+          if (attr === "fs" && canvas) {
+            const textInfo = getCellTextInfo(d[r][c]!, canvas, ctx, {
+              r,
+              c,
+              cellWidth,
+            });
+            if (!textInfo) continue;
+            const rowHeight = _.round(textInfo.textHeightAll);
+            const currentRowHeight =
+              cfg.rowlen?.[r] ||
+              ctx.luckysheetfile[sheetIndex].defaultRowHeight ||
+              19;
+            if (
+              !_.isUndefined(rowHeight) &&
+              rowHeight > currentRowHeight &&
+              (!cfg.customHeight || cfg.customHeight[r] !== 1)
+            ) {
+              if (_.isUndefined(cfg.rowlen)) cfg.rowlen = {};
+              _.set(cfg, `rowlen.${r}`, rowHeight);
+            }
+          }
         } else {
           // @ts-ignore
           d[r][c] = { v: value };
@@ -196,20 +233,20 @@ export function updateFormat(
   $input: HTMLDivElement,
   d: CellMatrix,
   attr: keyof Cell,
-  foucsStatus: any
+  foucsStatus: any,
+  canvas?: CanvasRenderingContext2D
 ) {
   //   if (!checkProtectionFormatCells(ctx.currentSheetId)) {
   //     return;
   //   }
 
-  if (!ctx.allowEdit) {
-    return;
-  }
+  const allowEdit = isAllowEdit(ctx);
+  if (!allowEdit) return;
 
   if (attr in inlineStyleAffectAttribute) {
     if (ctx.luckysheetCellUpdate.length > 0) {
       const value = $input.innerText;
-      if (!value.startsWith("=")) {
+      if (value.substring(0, 1) !== "=") {
         const cell =
           d[ctx.luckysheetCellUpdate[0]][ctx.luckysheetCellUpdate[1]];
         if (cell) {
@@ -229,7 +266,17 @@ export function updateFormat(
     const [row_st, row_ed] = selection.row;
     const [col_st, col_ed] = selection.column;
 
-    updateFormatCell(ctx, d, attr, foucsStatus, row_st, row_ed, col_st, col_ed);
+    updateFormatCell(
+      ctx,
+      d,
+      attr,
+      foucsStatus,
+      row_st,
+      row_ed,
+      col_st,
+      col_ed,
+      canvas
+    );
 
     // if (attr === "tb" || attr === "tr" || attr === "fs") {
     //   cfg = rowlenByRange(ctx, d, row_st, row_ed, cfg);
@@ -261,12 +308,13 @@ function setAttr(
   ctx: Context,
   cellInput: HTMLDivElement,
   attr: keyof Cell,
-  value: any
+  value: any,
+  canvas?: CanvasRenderingContext2D
 ) {
   const flowdata = getFlowdata(ctx);
   if (!flowdata) return;
 
-  updateFormat(ctx, cellInput, flowdata, attr, value);
+  updateFormat(ctx, cellInput, flowdata, attr, value, canvas);
 }
 // @ts-ignore
 function checkNoNullValue(cell) {
@@ -338,6 +386,7 @@ function getNoNullValue(d: CellMatrix, st_x: number, ed: number, type: string) {
 
 function activeFormulaInput(
   cellInput: HTMLDivElement,
+  fxInput: HTMLDivElement | null | undefined,
   ctx: Context,
   row_index: number,
   col_index: number,
@@ -384,7 +433,7 @@ function activeFormulaInput(
   ctx.formulaCache.rangedrag_column_start = false;
   ctx.formulaCache.rangedrag_row_start = false;
   ctx.formulaCache.rangechangeindex = 0;
-  rangeSetValue(ctx, cellInput, { row: rowh, column: columnh });
+  rangeSetValue(ctx, cellInput, { row: rowh, column: columnh }, fxInput);
   ctx.formulaCache.func_selectedrange = {
     left: col_pre,
     width: col - col_pre - 1,
@@ -450,6 +499,7 @@ function backFormulaInput(
 
 function singleFormulaInput(
   cellInput: HTMLDivElement,
+  fxInput: HTMLDivElement | null | undefined,
   ctx: Context,
   d: CellMatrix,
   _index: number,
@@ -501,6 +551,7 @@ function singleFormulaInput(
       if (type === "c") {
         activeFormulaInput(
           cellInput,
+          fxInput,
           ctx,
           _index,
           fix,
@@ -513,6 +564,7 @@ function singleFormulaInput(
       } else {
         activeFormulaInput(
           cellInput,
+          fxInput,
           ctx,
           fix,
           _index,
@@ -664,10 +716,12 @@ function singleFormulaInput(
 export function autoSelectionFormula(
   ctx: Context,
   cellInput: HTMLDivElement,
+  fxInput: HTMLDivElement | null | undefined,
   formula: string,
   cache: GlobalCache
 ) {
-  if (ctx.allowEdit === false) return;
+  const allowEdit = isAllowEdit(ctx);
+  if (!allowEdit) return;
   const flowdata = getFlowdata(ctx);
   if (flowdata == null) return;
   // const nullfindnum = 40;
@@ -687,6 +741,7 @@ export function autoSelectionFormula(
     if (st_c_c == null) {
       activeFormulaInput(
         cellInput,
+        fxInput,
         ctx,
         st_r,
         st_c,
@@ -699,6 +754,7 @@ export function autoSelectionFormula(
     } else {
       activeFormulaInput(
         cellInput,
+        fxInput,
         ctx,
         st_r,
         st_c,
@@ -725,6 +781,7 @@ export function autoSelectionFormula(
     } else {
       activeFormulaInput(
         cellInput,
+        fxInput,
         ctx,
         st_r,
         st_c,
@@ -747,6 +804,7 @@ export function autoSelectionFormula(
       if (ed_r - 1 < 0 && ed_c - 1 < 0) {
         activeFormulaInput(
           cellInput,
+          fxInput,
           ctx,
           st_r,
           st_c,
@@ -769,6 +827,7 @@ export function autoSelectionFormula(
     } else if (st_r === ed_r) {
       isfalse = singleFormulaInput(
         cellInput,
+        fxInput,
         ctx,
         flowdata,
         col_index!,
@@ -782,6 +841,7 @@ export function autoSelectionFormula(
     } else if (st_c === ed_c) {
       isfalse = singleFormulaInput(
         cellInput,
+        fxInput,
         ctx,
         flowdata,
         row_index!,
@@ -798,6 +858,7 @@ export function autoSelectionFormula(
         r_false =
           singleFormulaInput(
             cellInput,
+            fxInput,
             ctx,
             flowdata,
             col_index!,
@@ -817,6 +878,7 @@ export function autoSelectionFormula(
         c_false =
           singleFormulaInput(
             cellInput,
+            fxInput,
             ctx,
             flowdata,
             row_index!,
@@ -1105,7 +1167,8 @@ export function handleFormatPainter(ctx: Context) {
 
   // let _locale = locale();
   // let locale_paint = _locale.paint;
-  if (ctx.allowEdit === false) return;
+  const allowEdit = isAllowEdit(ctx);
+  if (!allowEdit) return;
   if (
     ctx.luckysheet_select_save == null ||
     ctx.luckysheet_select_save.length === 0
@@ -1206,34 +1269,6 @@ export function handleFormatPainter(ctx: Context) {
   ctx.luckysheetPaintSingle = true;
 }
 
-// 求两个数组的交集
-const getIntersection = (
-  section0: Array<number>,
-  section1: Array<number>
-): Array<number> => {
-  const st_max: number = section0[0] <= section1[0] ? section1[0] : section0[0];
-  const ed_min: number =
-    section0[section0.length - 1] >= section1[section1.length - 1]
-      ? section1[section1.length - 1]
-      : section0[section0.length - 1];
-  const intersection: Array<number> = st_max <= ed_min ? [st_max, ed_min] : [];
-  return intersection;
-};
-
-// 覆盖border-none
-function coverBorderNone(ctx: Context) {
-  const index = getSheetIndex(ctx, ctx.currentSheetId)!;
-  const borderInfo = {
-    rangeType: "range",
-    borderType: "border-none",
-    color: "#000000",
-    style: "1",
-    range: ctx.luckysheet_select_save,
-  };
-  ctx.config.borderInfo?.push(borderInfo);
-  ctx.luckysheetfile[index].config = ctx.config;
-}
-
 // 2022-10-10 废弃了handleClearFormat中的foreach写法，改为可跳出的every写法，以防止选区多次覆盖
 export function handleClearFormat(ctx: Context) {
   if (ctx.allowEdit === false) return;
@@ -1244,7 +1279,7 @@ export function handleClearFormat(ctx: Context) {
     const [colSt, colEd] = selection.column;
     for (let r = rowSt; r <= rowEd; r += 1) {
       if (!_.isNil(ctx.config.rowhidden) && !_.isNil(ctx.config.rowhidden[r])) {
-        return true;
+        continue;
       }
       for (let c = colSt; c <= colEd; c += 1) {
         const cell = flowdata[r][c];
@@ -1257,41 +1292,59 @@ export function handleClearFormat(ctx: Context) {
     if (index == null) return false;
     // 表格边框为空时，不对表格进行操作
     if (ctx.config.borderInfo == null) return false;
-    // 遍历表格边框信息
-    ctx.luckysheetfile[index].config?.borderInfo?.every((border) => {
-      if (border.borderType !== "border-none" && border.rangeType === "range") {
-        if (_.isNil(border.range) || border.range.length <= 0) return false;
-        border.range?.every((borderRange: any) => {
-          const borderRow = borderRange.row;
-          const borderCol = borderRange.column;
-          const targetRow = getIntersection(borderRow, [rowSt, rowEd]);
-          const targetCol = getIntersection(borderCol, [colSt, colEd]);
-          // 当重复的行或者列小于等于0时，不对表格进行操作
-          if (targetRow.length <= 0 || targetCol.length <= 0) {
-            return true;
+    const cfg = ctx.config || {};
+    if (cfg.borderInfo && cfg.borderInfo.length > 0) {
+      const source_borderInfo = [];
+
+      for (let i = 0; i < cfg.borderInfo.length; i += 1) {
+        const bd_rangeType = cfg.borderInfo[i].rangeType;
+
+        if (
+          bd_rangeType === "range" &&
+          cfg.borderInfo[i].borderType !== "border-slash"
+        ) {
+          const bd_range = cfg.borderInfo[i].range;
+          let bd_emptyRange: any = [];
+
+          for (let j = 0; j < bd_range.length; j += 1) {
+            bd_emptyRange = bd_emptyRange.concat(
+              cfSplitRange(
+                bd_range[j],
+                { row: [rowSt, rowEd], column: [colSt, colEd] },
+                { row: [rowSt, rowEd], column: [colSt, colEd] },
+                "restPart"
+              )
+            );
           }
 
-          // 一旦选区内和表格边框信息有交集，则覆盖一层border-none
-          coverBorderNone(ctx);
-          return true;
-        });
-      } else if (
-        !(border.borderType === "border-none") &&
-        border.rangeType === "cell"
-      ) {
-        if (
-          rowSt <= border.value.row_index &&
-          border.value.row_index <= rowEd &&
-          colSt <= border.value.col_index &&
-          border.value.col_index <= colEd
+          cfg.borderInfo[i].range = bd_emptyRange;
+
+          source_borderInfo.push(cfg.borderInfo[i]);
+        } else if (bd_rangeType === "cell") {
+          const bd_r = cfg.borderInfo[i].value.row_index;
+          const bd_c = cfg.borderInfo[i].value.col_index;
+
+          if (
+            !(bd_r >= rowSt && bd_r <= rowEd && bd_c >= colSt && bd_c <= colEd)
+          ) {
+            source_borderInfo.push(cfg.borderInfo[i]);
+          }
+        } else if (
+          bd_rangeType === "range" &&
+          cfg.borderInfo[i].borderType === "border-slash" &&
+          !(
+            cfg.borderInfo[i].range[0].row[0] >= rowSt &&
+            cfg.borderInfo[i].range[0].row[0] <= rowEd &&
+            cfg.borderInfo[i].range[0].column[0] >= colSt &&
+            cfg.borderInfo[i].range[0].column[0] <= colEd
+          )
         ) {
-          // 一旦选区内和表格边框信息有交集，则覆盖一层border-none
-          coverBorderNone(ctx);
-          return true;
+          source_borderInfo.push(cfg.borderInfo[i]);
         }
       }
-      return true;
-    });
+
+      ctx.luckysheetfile[index].config!.borderInfo = source_borderInfo;
+    }
     return true;
   });
 }
@@ -1312,7 +1365,12 @@ export function handleTextBackground(
   setAttr(ctx, cellInput, "bg", color);
 }
 
-export function handleBorder(ctx: Context, type: string) {
+export function handleBorder(
+  ctx: Context,
+  type: string,
+  borderColor?: string,
+  borderStyle?: string
+) {
   // *如果禁止前台编辑，则中止下一步操作
   // if (!checkIsAllowEdit()) {
   //   tooltip.info("", locale().pivotTable.errorNotAllowEdit);
@@ -1325,7 +1383,8 @@ export function handleBorder(ctx: Context, type: string) {
   // const d = editor.deepCopyFlowData(Store.flowdata);
   // let type = $(this).attr("type");
   // let type = "border-all";
-  if (ctx.allowEdit === false) return;
+  const allowEdit = isAllowEdit(ctx);
+  if (!allowEdit) return;
   if (type == null) {
     type = "border-all";
   }
@@ -1334,8 +1393,9 @@ export function handleBorder(ctx: Context, type: string) {
   // let color = $(`#${subcolormenuid}`).find(".luckysheet-color-selected").val();
   // let style = $("#luckysheetborderSizepreview").attr("itemvalue");
 
-  let color = "#000000";
-  let style = "1";
+  // let color = "#000000";
+  let color = borderColor;
+  let style = borderStyle;
 
   if (color == null || color === "") {
     color = "#000";
@@ -1350,15 +1410,35 @@ export function handleBorder(ctx: Context, type: string) {
     cfg.borderInfo = [];
   }
 
-  const borderInfo = {
-    rangeType: "range",
-    borderType: type,
-    color,
-    style,
-    range: _.cloneDeep(ctx.luckysheet_select_save) || [],
-  };
-
-  cfg.borderInfo.push(borderInfo);
+  if (type !== "border-slash") {
+    const borderInfo = {
+      rangeType: "range",
+      borderType: type,
+      color,
+      style,
+      range: _.cloneDeep(ctx.luckysheet_select_save) || [],
+    };
+    cfg.borderInfo.push(borderInfo);
+  } else {
+    const rangeList: string[] = [];
+    _.forEach(ctx.luckysheet_select_save, (selection) => {
+      for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {
+        for (let c = selection.column[0]; c <= selection.column[1]; c += 1) {
+          const range = `${r}_${c}`;
+          if (_.includes(rangeList, range)) continue;
+          const borderInfo = {
+            rangeType: "range",
+            borderType: type,
+            color,
+            style,
+            range: normalizeSelection(ctx, [{ row: [r, r], column: [c, c] }]),
+          };
+          cfg.borderInfo!.push(borderInfo);
+          rangeList.push(range);
+        }
+      }
+    });
+  }
 
   // server.saveParam("cg", ctx.currentSheetId, cfg.borderInfo, {
   //   k: "borderInfo",
@@ -1375,7 +1455,8 @@ export function handleBorder(ctx: Context, type: string) {
 }
 
 export function handleMerge(ctx: Context, type: string) {
-  if (ctx.allowEdit === false) return;
+  const allowEdit = isAllowEdit(ctx);
+  if (!allowEdit) return;
   // if (!checkProtectionNotEnable(ctx.currentSheetId)) {
   //   return;
   // }
@@ -1428,7 +1509,8 @@ export function handleSort(ctx: Context, isAsc: boolean) {
 }
 
 export function handleFreeze(ctx: Context, type: string) {
-  if (!ctx.allowEdit) return;
+  const allowEdit = isAllowEdit(ctx);
+  if (!allowEdit) return;
 
   const file = ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!];
   if (!file) return;
@@ -1442,8 +1524,8 @@ export function handleFreeze(ctx: Context, type: string) {
   if (!firstSelection) return;
 
   let { row_focus, column_focus } = firstSelection;
-  // if (!row_focus || !column_focus) return;
-  if (_.isUndefined(row_focus) || _.isUndefined(column_focus)) return;
+  if (row_focus == null || column_focus == null) return;
+
   const m = ctx.config.merge?.[`${row_focus}_${column_focus}`];
   if (m) {
     row_focus = m.r + m.rs - 1;
@@ -1461,21 +1543,24 @@ export function handleFreeze(ctx: Context, type: string) {
 export function handleTextSize(
   ctx: Context,
   cellInput: HTMLDivElement,
-  size: number
+  size: number,
+  canvas?: CanvasRenderingContext2D
 ) {
-  setAttr(ctx, cellInput, "fs", size);
+  setAttr(ctx, cellInput, "fs", size, canvas);
 }
 
 export function handleSum(
   ctx: Context,
   cellInput: HTMLDivElement,
+  fxInput: HTMLDivElement | null | undefined,
   cache?: GlobalCache
 ) {
-  autoSelectionFormula(ctx, cellInput, "SUM", cache!);
+  autoSelectionFormula(ctx, cellInput, fxInput, "SUM", cache!);
 }
 
 export function handleLink(ctx: Context) {
-  if (ctx.allowEdit === false) return;
+  const allowEdit = isAllowEdit(ctx);
+  if (!allowEdit) return;
   const selection = ctx.luckysheet_select_save?.[0];
   const flowdata = getFlowdata(ctx);
   if (flowdata != null && selection != null) {
@@ -1498,7 +1583,7 @@ const handlerMap: Record<string, ToolbarItemClickHandler> = {
   "clear-format": handleClearFormat,
   "format-painter": handleFormatPainter,
   search: (ctx: Context) => {
-    ctx.showSearchReplace = true;
+    ctx.showSearch = true;
   },
   link: handleLink,
 };

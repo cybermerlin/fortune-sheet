@@ -10,9 +10,12 @@ import {
   moveHighlightCell,
   escapeScriptTag,
   valueShowEs,
-  updateCell,
   createRangeHightlight,
   isShowHidenCR,
+  israngeseleciton,
+  escapeHTMLTag,
+  isAllowEdit,
+  getrangeseleciton,
 } from "@fortune-sheet/core";
 import React, {
   useContext,
@@ -40,12 +43,14 @@ const InputBox: React.FC = () => {
   const firstSelection = context.luckysheet_select_save?.[0];
   const row_index = firstSelection?.row_focus!;
   const col_index = firstSelection?.column_focus!;
+  const preText = useRef("");
 
   const inputBoxStyle = useMemo(() => {
     if (firstSelection && context.luckysheetCellUpdate.length > 0) {
       const flowdata = getFlowdata(context);
       if (!flowdata) return {};
       return getStyleByCell(
+        context,
         flowdata,
         firstSelection.row_focus!,
         firstSelection.column_focus!
@@ -61,6 +66,15 @@ const InputBox: React.FC = () => {
   ]);
 
   useLayoutEffect(() => {
+    if (!context.allowEdit) {
+      setContext((ctx) => {
+        const flowdata = getFlowdata(ctx);
+        if (!_.isNil(flowdata) && ctx.forceFormulaRef) {
+          const value = getCellValue(row_index, col_index, flowdata, "f");
+          createRangeHightlight(ctx, value);
+        }
+      });
+    }
     if (firstSelection && context.luckysheetCellUpdate.length > 0) {
       if (refs.globalCache.doNotUpdateCell) {
         delete refs.globalCache.doNotUpdateCell;
@@ -92,7 +106,9 @@ const InputBox: React.FC = () => {
         }
       }
       refs.globalCache.overwriteCell = false;
-      inputRef.current!.innerHTML = escapeScriptTag(value);
+      if (!refs.globalCache.ignoreWriteCell)
+        inputRef.current!.innerHTML = escapeHTMLTag(escapeScriptTag(value));
+      refs.globalCache.ignoreWriteCell = false;
       if (!refs.globalCache.doNotFocus) {
         setTimeout(() => {
           moveToEnd(inputRef.current!);
@@ -122,9 +138,76 @@ const InputBox: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [context.luckysheet_select_save]);
 
+  const getActiveFormula = useCallback(
+    () => document.querySelector(".luckysheet-formula-search-item-active"),
+    []
+  );
+
+  const clearSearchItemActiveClass = useCallback(() => {
+    const activeFormula = getActiveFormula();
+    if (activeFormula) {
+      activeFormula.classList.remove("luckysheet-formula-search-item-active");
+    }
+  }, [getActiveFormula]);
+
+  const selectActiveFormula = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      const activeFormula = getActiveFormula();
+      const formulaNameDiv = activeFormula?.querySelector(
+        ".luckysheet-formula-search-func"
+      );
+      if (formulaNameDiv) {
+        const formulaName = formulaNameDiv.textContent;
+        const textEditor = document.getElementById(
+          "luckysheet-rich-text-editor"
+        );
+        if (textEditor) {
+          // text for which suggestions have been listed
+          const searchTxt = getrangeseleciton()?.textContent || "";
+          const deleteCount = searchTxt.length;
+          textEditor.focus();
+
+          const selection = window.getSelection();
+          if (selection?.rangeCount === 0) return;
+
+          const range = selection?.getRangeAt(0);
+          if (deleteCount !== 0 && range) {
+            const startOffset = Math.max(range.startOffset - deleteCount, 0);
+            const endOffset = range.startOffset;
+
+            // remove searchTxt
+            range.setStart(range.startContainer, startOffset);
+            range.setEnd(range.startContainer, endOffset);
+            range.deleteContents();
+          }
+
+          // insert formulaName
+          // TODO - doesnt work without the space after the formulaName
+          const textNode = document.createTextNode(`${formulaName}( `);
+          range?.insertNode(textNode);
+
+          // move the cursor to the end of the inserted text node
+          range?.setStartAfter(textNode);
+          range?.setEndAfter(textNode);
+          selection?.removeAllRanges();
+          if (range) selection?.addRange(range);
+          setContext((draftCtx) => {
+            // clear functionCandidates and set functionHint
+            draftCtx.functionCandidates = [];
+            draftCtx.functionHint = formulaName;
+          });
+        }
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    [getActiveFormula, setContext]
+  );
+
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       lastKeyDownEventRef.current = new KeyboardEvent(e.type, e.nativeEvent);
+      preText.current = inputRef.current!.innerText;
       // if (
       //   $("#luckysheet-modal-dialog-mask").is(":visible") ||
       //   $(event.target).hasClass("luckysheet-mousedown-cancel") ||
@@ -145,120 +228,150 @@ const InputBox: React.FC = () => {
           document.execCommand("insertHTML", false, "\n "); // 换行符后面的空白符是为了强制让他换行，在下一步的delete中会删掉
           document.execCommand("delete", false);
           e.stopPropagation();
-        }
-        // if (
-        //   $("#luckysheet-formula-search-c").is(":visible") &&
-        //   formula.searchFunctionCell != null
-        // ) {
-        //   formula.searchFunctionEnter(
-        //     $("#luckysheet-formula-search-c").find(
-        //       ".luckysheet-formula-search-item-active"
-        //     )
-        //   );
-        //   event.preventDefault();
-        // }
+        } else selectActiveFormula(e);
       } else if (e.key === "Tab" && context.luckysheetCellUpdate.length > 0) {
-        // if (
-        //   $("#luckysheet-formula-search-c").is(":visible") &&
-        //   formula.searchFunctionCell != null
-        // ) {
-        //   formula.searchFunctionEnter(
-        //     $("#luckysheet-formula-search-c").find(
-        //       ".luckysheet-formula-search-item-active"
-        //     )
-        //   );
-        // } else {
-        setContext((draftCtx) => {
-          updateCell(
-            draftCtx,
-            draftCtx.luckysheetCellUpdate[0],
-            draftCtx.luckysheetCellUpdate[1],
-            refs.cellInput.current!
-          );
-          moveHighlightCell(draftCtx, "right", 1, "rangeOfSelect");
-        });
-        // }
-
+        selectActiveFormula(e);
         e.preventDefault();
-        e.stopPropagation();
       } else if (e.key === "F4" && context.luckysheetCellUpdate.length > 0) {
         // formula.setfreezonFuc(event);
         e.preventDefault();
-      } /* else if (
-            e.key === "ArrowUp" &&
-            draftCtx.luckysheetCellUpdate.length > 0
-          ) {
-            formulaMoveEvent("up", ctrlKey, shiftKey, event);
-          } else if (
-            e.key === "ArrowDown" &&
-            draftCtx.luckysheetCellUpdate.length > 0
-          ) {
-            formulaMoveEvent("down", ctrlKey, shiftKey, event);
-          } else if (
-            e.key === "ArrowLeft" &&
-            draftCtx.luckysheetCellUpdate.length > 0
-          ) {
-            formulaMoveEvent("left", ctrlKey, shiftKey, event);
-          } else if (
-            e.key === "ArrowRight" &&
-            draftCtx.luckysheetCellUpdate.length > 0
-          ) {
-            formulaMoveEvent("right", ctrlKey, shiftKey, event);
-          } */
+      } else if (
+        e.key === "ArrowUp" &&
+        context.luckysheetCellUpdate.length > 0
+      ) {
+        if (document.getElementById("luckysheet-formula-search-c")) {
+          const formulaSearchContainer = document.getElementById(
+            "luckysheet-formula-search-c"
+          );
+          const activeItem = formulaSearchContainer?.querySelector(
+            ".luckysheet-formula-search-item-active"
+          );
+          let previousItem = activeItem
+            ? activeItem.previousElementSibling
+            : null;
+          if (!previousItem) {
+            previousItem =
+              formulaSearchContainer?.querySelector(
+                ".luckysheet-formula-search-item:last-child"
+              ) || null;
+          }
+          clearSearchItemActiveClass();
+          if (previousItem) {
+            previousItem.classList.add("luckysheet-formula-search-item-active");
+          }
+        }
+        e.preventDefault();
+      } else if (
+        e.key === "ArrowDown" &&
+        context.luckysheetCellUpdate.length > 0
+      ) {
+        if (document.getElementById("luckysheet-formula-search-c")) {
+          const formulaSearchContainer = document.getElementById(
+            "luckysheet-formula-search-c"
+          );
+          const activeItem = formulaSearchContainer?.querySelector(
+            ".luckysheet-formula-search-item-active"
+          );
+          let nextItem = activeItem ? activeItem.nextElementSibling : null;
+          if (!nextItem) {
+            nextItem =
+              formulaSearchContainer?.querySelector(
+                ".luckysheet-formula-search-item:first-child"
+              ) || null;
+          }
+          clearSearchItemActiveClass();
+          if (nextItem) {
+            nextItem.classList.add("luckysheet-formula-search-item-active");
+          }
+        }
+        e.preventDefault();
+      }
+      // else if (
+      //   e.key === "ArrowLeft" &&
+      //   draftCtx.luckysheetCellUpdate.length > 0
+      // ) {
+      //   formulaMoveEvent("left", ctrlKey, shiftKey, event);
+      // } else if (
+      //   e.key === "ArrowRight" &&
+      //   draftCtx.luckysheetCellUpdate.length > 0
+      // ) {
+      //   formulaMoveEvent("right", ctrlKey, shiftKey, event);
+      // }
     },
-    [context.luckysheetCellUpdate.length, refs.cellInput, setContext]
+    [
+      clearSearchItemActiveClass,
+      context.luckysheetCellUpdate.length,
+      selectActiveFormula,
+      setContext,
+    ]
   );
 
-  const onChange = useCallback(() => {
-    // setInputHTML(html);
-    const e = lastKeyDownEventRef.current;
-    if (!e) return;
-    const kcode = e.keyCode;
-    if (!kcode) return;
+  const onChange = useCallback(
+    (__: any, isBlur?: boolean) => {
+      // setInputHTML(html);
+      const e = lastKeyDownEventRef.current;
+      if (!e) return;
+      const kcode = e.keyCode;
+      if (!kcode) return;
 
-    if (
-      !(
-        (
-          (kcode >= 112 && kcode <= 123) ||
-          kcode <= 46 ||
-          kcode === 144 ||
-          kcode === 108 ||
-          e.ctrlKey ||
-          e.altKey ||
-          (e.shiftKey &&
-            (kcode === 37 || kcode === 38 || kcode === 39 || kcode === 40))
-        )
-        // kcode === keycode.WIN ||
-        // kcode === keycode.WIN_R ||
-        // kcode === keycode.MENU))
-      ) ||
-      kcode === 8 ||
-      kcode === 32 ||
-      kcode === 46 ||
-      (e.ctrlKey && kcode === 86)
-    ) {
-      setContext((draftCtx) => {
-        // if(event.target.id!="luckysheet-input-box" && event.target.id!="luckysheet-rich-text-editor"){
-        handleFormulaInput(
-          draftCtx,
-          refs.fxInput.current!,
-          refs.cellInput.current!,
-          kcode
-        );
-        // formula.functionInputHanddler(
-        //   $("#luckysheet-functionbox-cell"),
-        //   $("#luckysheet-rich-text-editor"),
-        //   kcode
-        // );
-        // setCenterInputPosition(
-        //   draftCtx.luckysheetCellUpdate[0],
-        //   draftCtx.luckysheetCellUpdate[1],
-        //   draftCtx.flowdata
-        // );
-        // }
-      });
-    }
-  }, [refs.cellInput, refs.fxInput, setContext]);
+      if (
+        !(
+          (
+            (kcode >= 112 && kcode <= 123) ||
+            kcode <= 46 ||
+            kcode === 144 ||
+            kcode === 108 ||
+            e.ctrlKey ||
+            e.altKey ||
+            (e.shiftKey &&
+              (kcode === 37 || kcode === 38 || kcode === 39 || kcode === 40))
+          )
+          // kcode === keycode.WIN ||
+          // kcode === keycode.WIN_R ||
+          // kcode === keycode.MENU))
+        ) ||
+        kcode === 8 ||
+        kcode === 32 ||
+        kcode === 46 ||
+        (e.ctrlKey && kcode === 86)
+      ) {
+        setContext((draftCtx) => {
+          if (
+            (draftCtx.formulaCache.rangestart ||
+              draftCtx.formulaCache.rangedrag_column_start ||
+              draftCtx.formulaCache.rangedrag_row_start ||
+              israngeseleciton(draftCtx)) &&
+            isBlur
+          )
+            return;
+          if (!isAllowEdit(draftCtx, draftCtx.luckysheet_select_save)) {
+            return;
+          }
+          // if(event.target.id!="luckysheet-input-box" && event.target.id!="luckysheet-rich-text-editor"){
+          handleFormulaInput(
+            draftCtx,
+            refs.fxInput.current,
+            refs.cellInput.current!,
+            kcode,
+            preText.current
+          );
+          clearSearchItemActiveClass();
+          // formula.functionInputHanddler(
+          //   $("#luckysheet-functionbox-cell"),
+          //   $("#luckysheet-rich-text-editor"),
+          //   kcode
+          // );
+          // setCenterInputPosition(
+          //   draftCtx.luckysheetCellUpdate[0],
+          //   draftCtx.luckysheetCellUpdate[1],
+          //   draftCtx.flowdata
+          // );
+          // }
+        });
+      }
+    },
+    [clearSearchItemActiveClass, refs.cellInput, refs.fxInput, setContext]
+  );
 
   const onPaste = useCallback(
     (e: React.ClipboardEvent<HTMLDivElement>) => {
@@ -270,38 +383,29 @@ const InputBox: React.FC = () => {
   );
 
   const cfg = context.config || {};
-  let rowReadOnly: number[] = [];
-  let colReadOnly: number[] = [];
+  const rowReadOnly: Record<number, number> = cfg.rowReadOnly || {};
+  const colReadOnly: Record<number, number> = cfg.colReadOnly || {};
 
-  if (!_.isNil(cfg.rowReadOnly)) {
-    rowReadOnly = cfg.rowReadOnly;
-  }
-
-  if (!_.isNil(cfg.colReadOnly)) {
-    colReadOnly = cfg.colReadOnly;
-  }
-
-  let edit = context.allowEdit;
-  if (
-    (colReadOnly.indexOf(col_index) !== -1 ||
-      rowReadOnly.indexOf(row_index) !== -1) &&
+  const edit = !(
+    (colReadOnly[col_index] || rowReadOnly[row_index]) &&
     context.allowEdit === true
-  ) {
-    edit = false;
-  }
+  );
 
   return (
     <div
       className="luckysheet-input-box"
       style={
-        firstSelection && !_.isEmpty(context.luckysheetCellUpdate)
+        firstSelection && !context.rangeDialog?.show
           ? {
               left: firstSelection.left,
               top: firstSelection.top,
+              zIndex: _.isEmpty(context.luckysheetCellUpdate) ? -1 : 19,
               display: "block",
             }
           : { left: -10000, top: -10000, display: "block" }
       }
+      onMouseDown={(e) => e.stopPropagation()}
+      onMouseUp={(e) => e.stopPropagation()}
     >
       <div
         className="luckysheet-input-box-inner"
@@ -323,6 +427,12 @@ const InputBox: React.FC = () => {
           }}
           className="luckysheet-cell-input"
           id="luckysheet-rich-text-editor"
+          style={{
+            transform: `scale(${context.zoomRatio})`,
+            transformOrigin: "left top",
+            width: `${100 / context.zoomRatio}%`,
+            height: `${100 / context.zoomRatio}%`,
+          }}
           aria-autocomplete="list"
           onChange={onChange}
           onKeyDown={onKeyDown}

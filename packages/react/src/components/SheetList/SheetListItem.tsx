@@ -52,10 +52,12 @@ const SheetListItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             luckysheet_selection_range: draftCtx.luckysheet_selection_range,
           };
           draftCtx.currentSheetId = sheet.id!;
+          draftCtx.zoomRatio = sheet.zoomRatio || 1;
           cancelActiveImgItem(draftCtx, refs.globalCache);
           cancelNormalSelected(draftCtx);
         });
       }}
+      tabIndex={0}
     >
       <span className="fortune-sheet-selected-check-sapce">
         {sheet.id === context.currentSheetId && (

@@ -4,7 +4,7 @@
   background-color: #fafafc;
   color: #444;
   height: 31px;
-  padding: 0 0 0 44px;
+  padding: 0 30px 0 44px;
   margin: 0;
   -webkit-touch-callout: none;
   cursor: default;
@@ -31,7 +31,7 @@
   white-space: nowrap;
 }
 
-.luckysheet-sheet-area>div,
+.luckysheet-sheet-area > div,
 .luckysheet-sheet-area .luckysheet-sheets-item {
   display: inline-block;
   /* margin-right: 6px;
@@ -134,7 +134,9 @@
   text-align: center;
 }
 
-.luckysheet-sheet-area div.luckysheet-sheets-item .luckysheet-sheets-item-menu:hover {
+.luckysheet-sheet-area
+  div.luckysheet-sheets-item
+  .luckysheet-sheets-item-menu:hover {
   color: #2a2a2a;
   cursor: pointer;
 }
@@ -143,7 +145,7 @@
   padding: 0px 3px;
 }
 
-.luckysheet-sheets-item-name .luckysheet-sheets-item-color {
+.luckysheet-sheets-item-color {
   width: 100%;
   height: 10%;
   position: absolute;
@@ -151,7 +153,9 @@
   left: 0;
 }
 
-.luckysheet-sheet-area div.luckysheet-sheets-item .luckysheet-sheets-item-name[contenteditable="true"] {
+.luckysheet-sheet-area
+  div.luckysheet-sheets-item
+  .luckysheet-sheets-item-name[contenteditable="true"] {
   border: 1px solid #d9d9d9;
   display: inline-block;
   height: 18px;
@@ -165,7 +169,9 @@
   -webkit-user-select: text !important;
 }
 
-.luckysheet-sheet-area div.luckysheet-sheets-item .luckysheet-sheets-item-name[contenteditable="true"]:focus {
+.luckysheet-sheet-area
+  div.luckysheet-sheets-item
+  .luckysheet-sheets-item-name[contenteditable="true"]:focus {
   -webkit-box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   -moz-box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -247,23 +253,18 @@
 }
 
 .luckysheet-sheet-selection-calInfo {
-  max-width: 22%;
   display: flex;
   font-size: 12px;
-  justify-content: space-between;
-  position: absolute;
-  top: 0px;
-  right: 0px;
-  transform: translate(0px, 50%);
+  align-content: center;
+  padding: 0 0 0 44px;
+  height: 22px;
+  align-self: flex-end;
 }
 
 .luckysheet-sheet-selection-calInfo div {
-  width: 90px;
-  height: 18px;
-  overflow-x: auto;
+  margin: auto 0;
   white-space: nowrap;
-  margin-right: 2px;
-  text-align: center;
+  margin-right: 7px;
 }
 
 .luckysheet-sheets-item-function {
@@ -272,4 +273,8 @@
   position: absolute;
   top: 4px;
   right: 2px;
+}
+
+.fortune-sheet-area-right {
+  display: flex !important;
 }

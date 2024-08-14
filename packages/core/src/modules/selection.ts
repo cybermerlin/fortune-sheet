@@ -1,5 +1,5 @@
 import _, { isPlainObject } from "lodash";
-import type { Sheet as SheetType, Selection, Freezen, Range } from "../types";
+import type { Sheet as SheetType, Freezen, Range } from "../types";
 import { Context, getFlowdata } from "../context";
 import {
   getCellValue,
@@ -7,15 +7,22 @@ import {
   getDataBySelectionNoCopy,
   getStyleByCell,
   mergeBorder,
+  mergeMoveMain,
 } from "./cell";
 import { delFunctionGroup } from "./formula";
 import clipboard from "./clipboard";
 import { getBorderInfoCompute } from "./border";
-import { getSheetIndex, replaceHtml } from "../utils";
+import {
+  escapeHTMLTag,
+  getSheetIndex,
+  isAllowEdit,
+  replaceHtml,
+} from "../utils";
 import { hasPartMC } from "./validation";
 import { update } from "./format";
 // @ts-ignore
 import SSF from "./ssf";
+import { CFSplitRange } from "./ConditionFormat";
 
 export const selectionCache = {
   isPasteAction: false,
@@ -26,21 +33,40 @@ export function scrollToHighlightCell(ctx: Context, r: number, c: number) {
   const winH = ctx.cellmainHeight;
   const winW = ctx.cellmainWidth;
 
-  const row = ctx.visibledatarow[r];
-  const row_pre = r - 1 === -1 ? 0 : ctx.visibledatarow[r - 1];
-  const col = ctx.visibledatacolumn[c];
-  const col_pre = c - 1 === -1 ? 0 : ctx.visibledatacolumn[c - 1];
+  const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
+  const sheet = sheetIndex == null ? null : ctx.luckysheetfile[sheetIndex];
 
-  if (col - scrollLeft - winW + 20 > 0) {
-    ctx.scrollLeft = col - winW + 20;
-  } else if (col_pre - scrollLeft < 0) {
-    ctx.scrollLeft = col_pre - 20;
+  if (!sheet) return;
+
+  const frozen = sheet?.frozen;
+
+  if (r >= 0) {
+    const row_focus = sheet?.frozen?.range?.row_focus || 0;
+    const freezeH = frozen && r > row_focus ? ctx.visibledatarow[row_focus] : 0;
+    const row = ctx.visibledatarow[r];
+    const row_pre = r - 1 === -1 ? 0 : ctx.visibledatarow[r - 1];
+
+    if (row - scrollTop - winH + 20 > 0) {
+      ctx.scrollTop = row - winH + 20;
+    } else if (row_pre - scrollTop - freezeH < 0) {
+      const scrollAmount = Math.max(20, freezeH);
+      ctx.scrollTop = row_pre - scrollAmount;
+    }
   }
 
-  if (row - scrollTop - winH + 20 > 0) {
-    ctx.scrollTop = row - winH + 20;
-  } else if (row_pre - scrollTop < 0) {
-    ctx.scrollTop = row_pre - 20;
+  if (c >= 0) {
+    const column_focus = sheet?.frozen?.range?.column_focus || 0;
+    const freezeW =
+      frozen && c > column_focus ? ctx.visibledatacolumn[column_focus] : 0;
+    const col = ctx.visibledatacolumn[c];
+    const col_pre = c - 1 === -1 ? 0 : ctx.visibledatacolumn[c - 1];
+
+    if (col - scrollLeft - winW + 20 > 0) {
+      ctx.scrollLeft = col - winW + 20;
+    } else if (col_pre - scrollLeft - freezeW < 0) {
+      const scrollAmount = Math.max(20, freezeW);
+      ctx.scrollLeft = col_pre - scrollAmount;
+    }
   }
 }
 
@@ -57,12 +83,20 @@ export function seletedHighlistByindex(
   const col = ctx.visibledatacolumn[c2];
   const col_pre = c1 - 1 === -1 ? 0 : ctx.visibledatacolumn[c1 - 1];
 
-  return {
-    left: col_pre,
-    width: col - col_pre - 1,
-    top: row_pre,
-    height: row - row_pre - 1,
-  };
+  if (
+    _.isNumber(row) &&
+    _.isNumber(row_pre) &&
+    _.isNumber(col) &&
+    _.isNumber(col_pre)
+  ) {
+    return {
+      left: col_pre,
+      width: col - col_pre - 1,
+      top: row_pre,
+      height: row - row_pre - 1,
+    };
+  }
+  return null;
 }
 
 export function normalizeSelection(
@@ -382,6 +416,32 @@ export function pasteHandlerOfPaintModel(
             value = copyData[h - mth][c - mtc];
           }
 
+          if (isPlainObject(x[c])) {
+            if (x[c].ct && x[c].ct.t === "inlineStr" && value) {
+              delete value.ct;
+            } else {
+              const format = [
+                "bg",
+                "fc",
+                "ct",
+                "ht",
+                "vt",
+                "bl",
+                "it",
+                "cl",
+                "un",
+                "fs",
+                "ff",
+                "tb",
+              ];
+              format.forEach((item) => {
+                Reflect.deleteProperty(x[c], item);
+              });
+            }
+          } else {
+            x[c] = { v: x[c] };
+          }
+
           if (value != null) {
             delete value.v;
             delete value.m;
@@ -391,43 +451,10 @@ export function pasteHandlerOfPaintModel(
             if (value.ct && value.ct.t === "inlineStr") {
               delete value.ct;
             }
-            if (isPlainObject(x[c])) {
-              if (x[c].ct && x[c].ct.t === "inlineStr") {
-                delete value.ct;
-              } else {
-                const format = [
-                  "bg",
-                  "fc",
-                  "ct",
-                  "ht",
-                  "vt",
-                  "bl",
-                  "it",
-                  "cl",
-                  "un",
-                  "fs",
-                  "ff",
-                  "tb",
-                ];
-                format.forEach((item) => {
-                  Reflect.deleteProperty(x[c], item);
-                });
-              }
-            } else {
-              x[c] = { v: x[c] };
-            }
 
-            /**
-             * 2022.10.3弃用x[c] = _.assign(value, x[c]);
-             * 因为如果使用_.assign的话，将会导致x[c]的v和m都是value的值，从而导致一次性刷多个单元格的时候单元格值全为同一个数据
-             */
-            x[c] = {
-              ...value,
-              v: x[c].v,
-              m: x[c].m,
-            };
+            x[c] = _.assign(x[c], _.cloneDeep(value));
             if (x[c].ct && x[c].ct.t === "inlineStr") {
-              x[c].ct.s.forEach((item: any) => _.assign(value, item));
+              x[c].ct.s.forEach((item: any) => _.assign(item, value));
             }
 
             if (copyHasMC && x[c].mc) {
@@ -465,16 +492,6 @@ export function pasteHandlerOfPaintModel(
                 x[c].m = mask;
               }
             }
-          } else {
-            if (x[c]) {
-              x[c] = {
-                ...value,
-                v: x[c].v,
-                m: x[c].m,
-              };
-            } else {
-              x[c] = value;
-            }
           }
         }
         flowdata[h] = x;
@@ -487,38 +504,44 @@ export function pasteHandlerOfPaintModel(
   currFile.dataVerification = dataVerification;
 
   // 复制范围 是否有 条件格式
-  // let cdformat = null;
-  // const copyIndex = getSheetIndex(ctx, copySheetIndex)
-  // if (!copyIndex) return;
-  // let ruleArr = _.cloneDeep(ctx.luckysheetfile[copyIndex]["luckysheet_conditionformat_save"]);
+  let cdformat: any = null;
+  const copyIndex = getSheetIndex(ctx, copySheetIndex);
+  if (!copyIndex) return;
+  const ruleArr = _.cloneDeep(
+    ctx.luckysheetfile[copyIndex].luckysheet_conditionformat_save
+  );
 
-  // if (ruleArr != null && ruleArr.length > 0) {
-  //   const currentIndex = getSheetIndex(ctx, ctx.currentSheetId)
-  //   if (!currentIndex) return;
-  //   cdformat = _.cloneDeep(ctx.luckysheetfile[currentIndex]["luckysheet_conditionformat_save"]);
+  if (!_.isNil(ruleArr) && ruleArr.length > 0) {
+    const currentIndex = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    cdformat = _.cloneDeep(
+      ctx.luckysheetfile[currentIndex].luckysheet_conditionformat_save
+    );
 
-  //   for (let i = 0; i < ruleArr.length; i++) {
-  //     let cdformat_cellrange = ruleArr[i].cellrange;
-  //     let emptyRange: any[] = [];
+    for (let i = 0; i < ruleArr.length; i += 1) {
+      const cdformat_cellrange = ruleArr[i].cellrange;
+      let emptyRange: any[] = [];
 
-  // for (let j = 0; j < cdformat_cellrange.length; j++) {
-  //   let range = conditionformat.CFSplitRange(
-  //     cdformat_cellrange[j],
-  //     { "row": [c_r1, c_r2], "column": [c_c1, c_c2] },
-  //     { "row": [minh, maxh], "column": [minc, maxc] },
-  //     "operatePart"
-  //   );
+      for (let j = 0; j < cdformat_cellrange.length; j += 1) {
+        const range = CFSplitRange(
+          cdformat_cellrange[j],
+          { row: [c_r1, c_r2], column: [c_c1, c_c2] },
+          { row: [minh, maxh], column: [minc, maxc] },
+          "operatePart"
+        );
 
-  //   if (range.length > 0) {
-  //     emptyRange = emptyRange.concat(range);
-  //   }
-  // }
+        if (range.length > 0) {
+          emptyRange = emptyRange.concat(range);
+        }
+      }
 
-  // if (emptyRange.length > 0) {
-  //   ruleArr[i].cellrange = [{ "row": [minh, maxh], "column": [minc, maxc] }];
-  //   cdformat.push(ruleArr[i]);
-  // }
+      if (emptyRange.length > 0) {
+        ruleArr[i].cellrange = [{ row: [minh, maxh], column: [minc, maxc] }];
+        cdformat.push(ruleArr[i]);
+      }
+    }
+  }
 }
+
 // }
 
 // last["row"] = [minh, maxh];
@@ -581,6 +604,175 @@ export function selectionCopyShow(range: any, ctx: Context) {
   //     }
   // }
 }
+
+// shift + 方向键 / ctrl + shift + 方向键 功能
+export function rowHasMerged(ctx: Context, r: number, c1: number, c2: number) {
+  let hasMerged = false;
+  const flowData = getFlowdata(ctx);
+  if (_.isNil(flowData) || _.isNil(flowData[r])) return false;
+  for (let c = c1; c <= c2; c += 1) {
+    const cell = flowData[r][c];
+    if (!_.isNil(cell) && "mc" in cell) {
+      hasMerged = true;
+      break;
+    }
+  }
+
+  return hasMerged;
+}
+export function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
+  let hasMerged = false;
+  const flowData = getFlowdata(ctx);
+  if (_.isNil(flowData)) return false;
+  for (let r = r1; r <= r2; r += 1) {
+    const cell = flowData[r]?.[c];
+    if (
+      !_.isNil(ctx.config.merge) &&
+      !_.isNil(cell) &&
+      "mc" in cell &&
+      !_.isNil(cell.mc)
+    ) {
+      hasMerged = true;
+      break;
+    }
+  }
+  return hasMerged;
+}
+
+// 得到合并
+export function getRowMerge(
+  ctx: Context,
+  rIndex: number,
+  c1: number,
+  c2: number
+) {
+  const flowData = getFlowdata(ctx);
+  if (_.isNil(flowData)) return [null, null];
+  // const r1 = 0;
+  const r2 = flowData.length - 1;
+  let str = null;
+  if (rIndex > 0) {
+    for (let r = rIndex; r >= 0; r -= 1) {
+      for (let c = c1; c <= c2; c += 1) {
+        const cell = flowData[r][c];
+        if (
+          !_.isNil(cell) &&
+          !_.isNil(cell.mc) &&
+          "mc" in cell &&
+          !_.isNil(ctx.config.merge)
+        ) {
+          const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
+          if (_.isNil(str) || mc.r < str) {
+            str = mc.r;
+          }
+        }
+      }
+      if (!_.isNil(str) && rowHasMerged(ctx, str - 1, c1, c2) && str > 0) {
+        r = str;
+      } else {
+        break;
+      }
+    }
+  } else {
+    str = 0;
+  }
+  let end = null;
+  if (rIndex < r2) {
+    for (let r = rIndex; r <= r2; r += 1) {
+      for (let c = c1; c <= c2; c += 1) {
+        const cell = flowData[r][c];
+        if (
+          !_.isNil(cell) &&
+          !_.isNil(cell.mc) &&
+          "mc" in cell &&
+          !_.isNil(ctx.config.merge)
+        ) {
+          const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
+          if (_.isNil(end) || mc.r + mc.rs - 1 > end) {
+            end = mc.r + mc.rs - 1;
+          }
+        }
+      }
+      if (!_.isNil(end) && rowHasMerged(ctx, end + 1, c1, c2) && end < r2) {
+        r = end;
+      } else {
+        break;
+      }
+    }
+  } else {
+    end = r2;
+  }
+  return [str, end];
+}
+
+export function getColMerge(
+  ctx: Context,
+  cIndex: number,
+  r1: number,
+  r2: number
+) {
+  const flowData = getFlowdata(ctx);
+  if (_.isNil(flowData)) {
+    return [null, null];
+  }
+  // const c1 = 0;
+  const c2 = flowData[0].length - 1;
+  let str = null;
+  if (cIndex > 0) {
+    for (let c = cIndex; c >= 0; c -= 1) {
+      for (let r = r1; r <= r2; r += 1) {
+        const cell = flowData[r][c];
+        if (
+          !_.isNil(ctx.config.merge) &&
+          !_.isNil(cell) &&
+          "mc" in cell &&
+          !_.isNil(cell.mc)
+        ) {
+          const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
+          if (_.isNil(str) || mc.c < str) {
+            str = mc.c;
+          }
+        }
+      }
+      if (!_.isNil(str) && colHasMerged(ctx, str - 1, r1, r2) && str > 0) {
+        c = str;
+      } else {
+        break;
+      }
+    }
+  } else {
+    str = 0;
+  }
+  let end = null;
+  if (cIndex < c2) {
+    for (let c = cIndex; c <= c2; c += 1) {
+      for (let r = r1; r <= r2; r += 1) {
+        const cell = flowData[r][c];
+        if (
+          !_.isNil(ctx.config.merge) &&
+          !_.isNil(cell) &&
+          "mc" in cell &&
+          !_.isNil(cell.mc)
+        ) {
+          const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
+          if (_.isNil(end) || mc.c + mc.cs - 1 > end) {
+            end = mc.c + mc.cs - 1;
+          }
+        }
+      }
+
+      if (!_.isNil(end) && colHasMerged(ctx, end + 1, r1, r2) && end < c2) {
+        c = end;
+      } else {
+        break;
+      }
+    }
+  } else {
+    end = c2;
+  }
+  return [str, end];
+}
+
 export function moveHighlightCell(
   ctx: Context,
   postion: "down" | "right",
@@ -907,6 +1099,391 @@ export function moveHighlightCell(
   // server.saveParam("mv", ctx.currentSheetId, ctx.luckysheet_select_save);
 }
 
+// shift + 方向键  调整选区
+export function moveHighlightRange(
+  ctx: Context,
+  postion: "down" | "right",
+  index: number,
+  type: "rangeOfSelect" | "rangeOfFormula"
+) {
+  let row;
+  let row_pre;
+  let col;
+  let col_pre;
+  const flowData = getFlowdata(ctx);
+  if (_.isNil(flowData)) return;
+  if (_.isNil(ctx.luckysheet_select_save)) return;
+  if (type === "rangeOfSelect") {
+    const last =
+      ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
+    let curR = last.row[0];
+    let endR = last.row[1];
+    let curC = last.column[0];
+    let endC = last.column[1];
+    const rf = last.row_focus;
+    const cf = last.column_focus;
+    if (_.isNil(rf) || _.isNil(cf)) return;
+    const datarowlen = flowData.length;
+    const datacolumnlen = flowData[0].length;
+    if (postion === "down") {
+      // 选区上下变动
+      if (rowHasMerged(ctx, rf, curC, endC)) {
+        // focus单元格所在行有合并单元格
+        const rfMerge = getRowMerge(ctx, rf, curC, endC);
+        const rf_str = rfMerge[0];
+        const rf_end = rfMerge[1];
+        if (!_.isNil(rf_str) && rf_str > curR && rf_end === endR) {
+          if (index > 0 && rowHasMerged(ctx, curR, curC, endC)) {
+            const v = getRowMerge(ctx, curR, curC, endC)[1];
+            if (!_.isNil(v)) {
+              curR = v;
+            }
+          }
+          curR += index;
+        } else if (!_.isNil(rf_end) && rf_end < endR && rf_str === curR) {
+          if (index < 0 && rowHasMerged(ctx, endR, curC, endC)) {
+            const v = getRowMerge(ctx, curR, curC, endC)[0];
+            if (!_.isNil(v)) {
+              endR = v;
+            }
+          }
+          endR += index;
+        } else {
+          if (index > 0) {
+            endR += index;
+          } else {
+            curR += index;
+          }
+        }
+      } else {
+        if (rf > curR && rf === endR) {
+          if (index > 0 && rowHasMerged(ctx, curR, curC, endC)) {
+            const v = getRowMerge(ctx, curR, curC, endC)[1];
+            if (!_.isNil(v)) {
+              curR = v;
+            }
+          }
+          curR += index;
+        } else if (rf < endR && rf === curR) {
+          if (index < 0 && rowHasMerged(ctx, endR, curC, endC)) {
+            const v = getRowMerge(ctx, endR, curC, endC)[0];
+            if (!_.isNil(v)) {
+              endR = v;
+            }
+          }
+          endR += index;
+        } else if (rf === curR && rf === endR) {
+          if (index > 0) {
+            endR += index;
+          } else {
+            curR += index;
+          }
+        }
+      }
+      if (endR >= datarowlen) {
+        endR = datarowlen - 1;
+      }
+      if (endR < 0) {
+        endR = 0;
+      }
+      if (curR >= datarowlen) {
+        curR = datarowlen - 1;
+      }
+      if (curR < 0) {
+        curR = 0;
+      }
+    } else {
+      if (colHasMerged(ctx, cf, curR, endR)) {
+        const cfMerge = getColMerge(ctx, cf, curR, endR);
+        const cf_str = cfMerge[0];
+        const cf_end = cfMerge[1];
+        if (!_.isNil(cf_str) && cf_str > curC && cf_end === endC) {
+          if (index > 0 && colHasMerged(ctx, curC, curR, endR)) {
+            const v = getColMerge(ctx, curC, curR, endR)[1];
+            if (!_.isNil(v)) {
+              curC = v;
+            }
+            curC += index;
+          }
+          curC += index;
+        } else if (!_.isNil(cf_end) && cf_end < endC && cf_str === curC) {
+          if (index < 0 && colHasMerged(ctx, endC, curR, endR)) {
+            const v = getColMerge(ctx, endC, curR, endR)[0];
+            if (!_.isNil(v)) {
+              endC = v;
+            }
+          }
+          endC += index;
+        } else {
+          if (index > 0) {
+            endC += index;
+          } else {
+            curC += index;
+          }
+        }
+      } else {
+        if (cf > curC && cf === endC) {
+          if (index > 0 && colHasMerged(ctx, curC, curR, endR)) {
+            const v = getColMerge(ctx, curC, curR, endR)[1];
+            if (!_.isNil(v)) {
+              curC = v;
+            }
+            curC += index;
+          }
+          curC += index;
+        } else if (cf < endC && cf === curC) {
+          if (index < 0 && colHasMerged(ctx, endC, curR, endR)) {
+            const v = getColMerge(ctx, endC, curR, endR)[0];
+            if (!_.isNil(v)) {
+              endC = v;
+            }
+          }
+          endC += index;
+        } else if (cf === curC && cf === endC) {
+          if (index > 0) {
+            endC += index;
+          } else {
+            curC += index;
+          }
+        }
+      }
+      if (endC >= datacolumnlen) {
+        endC = datacolumnlen - 1;
+      }
+      if (endC < 0) {
+        endC = 0;
+      }
+      if (curC >= datacolumnlen) {
+        curC = datacolumnlen - 1;
+      }
+      if (curC < 0) {
+        curC = 0;
+      }
+    }
+    let rowseleted: any = [curR, endR];
+    let columnseleted: any = [curC, endC];
+    row = ctx.visibledatarow[endR];
+    row_pre = curR - 1 === -1 ? 0 : ctx.visibledatarow[curR - 1];
+    col = ctx.visibledatacolumn[endC];
+    col_pre = curC - 1 === -1 ? 0 : ctx.visibledatacolumn[curC - 1];
+    const changeparam = mergeMoveMain(
+      ctx,
+      columnseleted,
+      rowseleted,
+      last,
+      row_pre,
+      row - row_pre - 1,
+      col_pre,
+      col - col_pre - 1
+    );
+    if (!_.isNil(changeparam)) {
+      [columnseleted, rowseleted] = changeparam;
+    }
+    last.row = rowseleted;
+    last.column = columnseleted;
+    normalizeSelection(ctx, ctx.luckysheet_select_save);
+
+    if (postion === "down") {
+      const rowToScroll =
+        last.row_focus === last.row[0] ? last.row[1] : last.row[0];
+      scrollToHighlightCell(ctx, rowToScroll, -1);
+    } else {
+      const columnToScroll =
+        last.column_focus === last.column[0] ? last.column[1] : last.column[0];
+      scrollToHighlightCell(ctx, -1, columnToScroll);
+    }
+  } else if (type === "rangeOfFormula") {
+    const last = ctx.formulaCache.func_selectedrange;
+    if (_.isNil(last)) return;
+    let curR = last.row[0];
+    let endR = last.row[1];
+    let curC = last.column[0];
+    let endC = last.column[1];
+    const rf = last.row_focus;
+    const cf = last.column_focus;
+
+    const datarowlen = flowData.length;
+    const datacolumnlen = flowData[0].length;
+
+    if (postion === "down") {
+      if (!_.isNil(rf) && rowHasMerged(ctx, rf, curC, endC)) {
+        const rfMerge = getRowMerge(ctx, rf, curC, endC);
+        const rf_str = rfMerge[0];
+        const rf_end = rfMerge[1];
+        if (!_.isNil(rf_str) && rf_str > curR && rf_end === endR) {
+          if (index > 0 && rowHasMerged(ctx, curR, curC, endC)) {
+            const v = getRowMerge(ctx, curR, curC, endC)[1];
+            if (!_.isNil(v)) {
+              curR = v;
+            }
+          }
+          curR += index;
+        } else if (!_.isNil(rf_end) && rf_end < endR && rf_str === curR) {
+          if (index < 0 && rowHasMerged(ctx, endR, curC, endC)) {
+            const v = getRowMerge(ctx, endR, curC, endC)[0];
+            if (!_.isNil(v)) {
+              endR = v;
+            }
+            endR += index;
+          }
+        } else {
+          if (index > 0) {
+            endR += index;
+          } else {
+            curR += index;
+          }
+        }
+      } else {
+        if (!_.isNil(rf) && rf > curR && rf === endR) {
+          if (index > 0 && rowHasMerged(ctx, curR, curC, endC)) {
+            const v = getRowMerge(ctx, curR, curC, endC)[1];
+            if (!_.isNil(v)) {
+              curR = v;
+            }
+          }
+          curR += index;
+        } else if (!_.isNil(rf) && rf < endR && rf === curR) {
+          if (index < 0 && rowHasMerged(ctx, endR, curC, endC)) {
+            const v = getRowMerge(ctx, endR, curC, endC)[0];
+            if (!_.isNil(v)) {
+              endR = v;
+            }
+          }
+          endR += index;
+        } else if (rf === curR && rf === endR) {
+          if (index > 0) {
+            endR += index;
+          } else {
+            curR += index;
+          }
+        }
+      }
+      if (endR >= datarowlen) {
+        endR = datarowlen - 1;
+      }
+      if (endR < 0) {
+        endR = 0;
+      }
+      if (curR >= datarowlen) {
+        curR = datarowlen - 1;
+      }
+      if (curR < 0) {
+        curR = 0;
+      }
+    } else {
+      if (!_.isNil(cf) && colHasMerged(ctx, cf, curR, endR)) {
+        const cfMerge = getColMerge(ctx, cf, curR, endR);
+        const cf_str = cfMerge[0];
+        const cf_end = cfMerge[1];
+        if (!_.isNil(cf_str) && cf_str > curC && cf_end === endC) {
+          if (index > 0 && colHasMerged(ctx, curC, curR, endR)) {
+            const v = getColMerge(ctx, curC, curR, endR)[1];
+            if (!_.isNil(v)) {
+              curC = v;
+            }
+          }
+
+          curC += index;
+        } else if (!_.isNil(cf_end) && cf_end < endC && cf_str === curC) {
+          if (index < 0 && colHasMerged(ctx, endC, curR, endR)) {
+            const v = getColMerge(ctx, endC, curR, endR)[0];
+            if (!_.isNil(v)) {
+              endC = v;
+            }
+          }
+
+          endC += index;
+        } else {
+          if (index > 0) {
+            endC += index;
+          } else {
+            curC += index;
+          }
+        }
+      } else {
+        if (!_.isNil(cf) && cf > curC && cf === endC) {
+          if (index > 0 && colHasMerged(ctx, curC, curR, endR)) {
+            const v = getColMerge(ctx, curC, curR, endR)[1];
+            if (!_.isNil(v)) {
+              curC = v;
+            }
+          }
+
+          curC += index;
+        } else if (!_.isNil(cf) && cf < endC && cf === curC) {
+          if (index < 0 && colHasMerged(ctx, endC, curR, endR)) {
+            const v = getColMerge(ctx, endC, curR, endR)[0];
+            if (!_.isNil(v)) {
+              endC = v;
+            }
+          }
+
+          endC += index;
+        } else if (cf === curC && cf === endC) {
+          if (index > 0) {
+            endC += index;
+          } else {
+            curC += index;
+          }
+        }
+      }
+      if (endC >= datacolumnlen) {
+        endC = datacolumnlen - 1;
+      }
+      if (endC < 0) {
+        endC = 0;
+      }
+      if (curC >= datacolumnlen) {
+        curC = datacolumnlen - 1;
+      }
+      if (curC < 0) {
+        curC = 0;
+      }
+    }
+    let rowseleted = [curR, endR];
+    let columnseleted = [curC, endC];
+
+    row = ctx.visibledatarow[endR];
+    row_pre = curR - 1 === -1 ? 0 : ctx.visibledatarow[curR - 1];
+    col = ctx.visibledatacolumn[endC];
+    col_pre = curC - 1 === -1 ? 0 : ctx.visibledatacolumn[curC - 1];
+
+    let top = row_pre;
+    let height = row - row_pre - 1;
+    let left = col_pre;
+    let width = col - col_pre - 1;
+
+    const changeparam = mergeMoveMain(
+      ctx,
+      columnseleted,
+      rowseleted,
+      last,
+      top,
+      height,
+      left,
+      width
+    );
+    if (!_.isNil(changeparam)) {
+      // @ts-ignore
+      [columnseleted, rowseleted, top, height, left, width] = changeparam;
+    }
+    ctx.formulaCache.func_selectedrange = {
+      left,
+      width,
+      top,
+      height,
+      left_move: left,
+      width_move: width,
+      top_move: top,
+      height_move: height,
+      row: rowseleted,
+      column: columnseleted,
+      row_focus: rf,
+      column_focus: cf,
+    };
+  }
+}
+
 function getHtmlBorderStyle(type: string, color: string) {
   let style = "";
   const borderType: any = {
@@ -973,25 +1550,11 @@ export function rangeValueToHtml(
     const c2 = range.column[1];
 
     for (let copyR = r1; copyR <= r2; copyR += 1) {
-      if (
-        !_.isNil(sheet.config?.rowhidden) &&
-        !_.isNil(sheet.config?.rowhidden[copyR])
-      ) {
-        continue;
-      }
-
       if (!rowIndexArr.includes(copyR)) {
         rowIndexArr.push(copyR);
       }
 
       for (let copyC = c1; copyC <= c2; copyC += 1) {
-        if (
-          !_.isNil(sheet.config?.colhidden) &&
-          !_.isNil(sheet.config?.colhidden[copyC])
-        ) {
-          continue;
-        }
-
         if (!colIndexArr.includes(copyC)) {
           colIndexArr.push(copyC);
         }
@@ -1017,24 +1580,10 @@ export function rangeValueToHtml(
   for (let i = 0; i < rowIndexArr.length; i += 1) {
     const r = rowIndexArr[i];
 
-    if (
-      !_.isNil(sheet.config?.rowhidden) &&
-      !_.isNil(sheet.config?.rowhidden[r])
-    ) {
-      continue;
-    }
-
     cpdata += "<tr>";
 
     for (let j = 0; j < colIndexArr.length; j += 1) {
       const c = colIndexArr[j];
-
-      if (
-        !_.isNil(sheet.config?.colhidden) &&
-        !_.isNil(sheet.config?.colhidden[c])
-      ) {
-        continue;
-      }
 
       // eslint-disable-next-line no-template-curly-in-string
       let column = '<td ${span} style="${style}">';
@@ -1082,7 +1631,7 @@ export function rangeValueToHtml(
           c_value = getCellValue(r, c, d, "m");
         }
 
-        const styleObj = getStyleByCell(d, r, c);
+        const styleObj = getStyleByCell(ctx, d, r, c);
         style += _.map(styleObj, (v, key) => {
           return `${_.kebabCase(key)}:${_.isNumber(v) ? `${v}px` : v};`;
         }).join("");
@@ -1352,7 +1901,7 @@ export function rangeValueToHtml(
           c_value = "";
         }
 
-        column += c_value;
+        column += escapeHTMLTag(c_value);
       } else {
         let style = "";
 
@@ -1516,7 +2065,8 @@ export function deleteSelectedCellText(ctx: Context): string {
   // $("#luckysheet-rightclick-menu").hide();
   // luckysheetContainerFocus();
 
-  if (ctx.allowEdit === false) {
+  const allowEdit = isAllowEdit(ctx);
+  if (allowEdit === false) {
     return "allowEdit";
   }
 
@@ -1655,33 +2205,21 @@ export function selectAll(ctx: Context) {
   normalizeSelection(ctx, ctx.luckysheet_select_save);
 }
 
-export function getSelectionStyle(
+export function fixRowStyleOverflowInFreeze(
   ctx: Context,
-  selection: Selection,
+  r1: number,
+  r2: number,
   freeze: Freezen | undefined
 ): {
-  left: number | undefined;
-  top: number | undefined;
-  width: number | undefined;
-  height: number | undefined;
-  display: string;
+  top?: number;
+  height?: number;
+  display?: string;
 } {
-  const ret = {
-    left: selection.left_move,
-    top: selection.top_move,
-    width: selection.width_move,
-    height: selection.height_move,
-    display: "block",
-  };
-  if (!freeze) return ret;
+  if (!freeze) return {};
 
+  const ret: ReturnType<typeof fixRowStyleOverflowInFreeze> = {};
   const { scrollTop } = ctx;
-  const { scrollLeft } = ctx;
-
-  const freezenverticaldata = freeze?.vertical?.freezenverticaldata;
-  const freezenhorizontaldata = freeze?.horizontal?.freezenhorizontaldata;
-
-  const obj = selection;
+  const freezenhorizontaldata = freeze.horizontal?.freezenhorizontaldata;
 
   let rangeshow = true;
 
@@ -1689,9 +2227,6 @@ export function getSelectionStyle(
     const freezenTop = freezenhorizontaldata[0];
     const freezen_rowindex = freezenhorizontaldata[1];
     const offTop = scrollTop - freezenhorizontaldata[2];
-
-    const r1 = obj.row[0];
-    const r2 = obj.row[1];
 
     const row = ctx.visibledatarow[r2];
     const row_pre = r1 - 1 === -1 ? 0 : ctx.visibledatarow[r1 - 1];
@@ -1723,13 +2258,34 @@ export function getSelectionStyle(
     }
   }
 
+  if (!rangeshow) {
+    ret.display = "none";
+  }
+  return ret;
+}
+
+export function fixColumnStyleOverflowInFreeze(
+  ctx: Context,
+  c1: number,
+  c2: number,
+  freeze: Freezen | undefined
+): {
+  left?: number;
+  width?: number;
+  display?: string;
+} {
+  if (!freeze) return {};
+
+  const ret: ReturnType<typeof fixColumnStyleOverflowInFreeze> = {};
+  const { scrollLeft } = ctx;
+  const freezenverticaldata = freeze.vertical?.freezenverticaldata;
+
+  let rangeshow = true;
+
   if (freezenverticaldata != null) {
     const freezenLeft = freezenverticaldata[0];
     const freezen_colindex = freezenverticaldata[1];
     const offLeft = scrollLeft - freezenverticaldata[2];
-
-    const c1 = obj.column[0];
-    const c2 = obj.column[1];
 
     const col = ctx.visibledatacolumn[c2];
     const col_pre = c1 - 1 === -1 ? 0 : ctx.visibledatacolumn[c1 - 1];
@@ -1766,7 +2322,7 @@ export function getSelectionStyle(
   return ret;
 }
 
-export function calcSelectionInfo(ctx: Context) {
+export function calcSelectionInfo(ctx: Context, lang?: string | null) {
   const selection = ctx.luckysheet_select_save!;
   let numberC = 0;
   let count = 0;
@@ -1779,9 +2335,13 @@ export function calcSelectionInfo(ctx: Context) {
       for (let c = 0; c < data[0].length; c += 1) {
         // 防止选区长度超出data
         if (r >= data.length || c >= data[0].length) break;
+        const ct = data![r][c]?.ct?.t as string;
         const value = data![r][c]?.m as string;
         // 判断是不是数字
-        if (parseFloat(value).toString() !== "NaN") {
+        if (
+          ct === "n" ||
+          (ct === "g" && parseFloat(value).toString() !== "NaN")
+        ) {
           const valueNumber = parseFloat(value);
           count += 1;
           sum += valueNumber;
@@ -1794,9 +2354,11 @@ export function calcSelectionInfo(ctx: Context) {
       }
     }
   }
-  const average: string = SSF.format("w0.00", sum / numberC);
-  sum = SSF.format("w0.00", sum);
-  max = SSF.format("w0.00", max);
-  min = SSF.format("w0.00", min);
+  const formatString =
+    lang && !["zh", "zh_tw"].includes(lang) ? "0.00" : "w0.00";
+  const average: string = SSF.format(formatString, sum / numberC);
+  sum = SSF.format(formatString, sum);
+  max = SSF.format(formatString, max);
+  min = SSF.format(formatString, min);
   return { numberC, count, sum, max, min, average };
 }

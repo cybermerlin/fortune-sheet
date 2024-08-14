@@ -24,6 +24,11 @@ This project is originated from [Luckysheet](https://github.com/mengshukeji/Luck
 
 We aim to make FortuneSheet powerful yet easy to maintain.
 
+## Communication
+* [Discord](https://discord.gg/vHGwMB77w5) English community 
+* [QQ](https://jq.qq.com/?_wv=1027&k=iHaSN47J) Chinese community
+* [Xiemala](https://xiemala.com/s/ctJmUn)
+
 ## Live demo
 
 Take a look at the live demo at [fortune-sheet-demo](https://ruilisi.github.io/fortune-sheet-demo/)
@@ -67,7 +72,7 @@ Before stable release of 1.0, input data structure and APIs may change during de
 - ✅ Add tests.
 - More basic features:
   - ✅ fill handle
-  - fonts
+  - ✅fonts
   - ✅ format painter
   - ✅ comments
   - ✅ insert images
@@ -78,13 +83,13 @@ Before stable release of 1.0, input data structure and APIs may change during de
   - ✅ sort
   - ✅ filter
   - ✅ hooks
-  - conditional formatting
+  - ✅ conditional formatting
   - ✅ drag and drop
   - ✅ find and replace
   - location
-  - data verification
+  - ✅ data verification
   - ✅ freeze
-  - hide, and split text
+  - ✅ hide, and split text
 - More advanced features:
   - pivot tables
   - charts
@@ -97,13 +102,30 @@ See detailed documentation at [fortune-sheet-doc](https://ruilisi.github.io/fort
 ## Get started (react)
 
 ### Download and install the library
-```shell
-yarn add @fortune-sheet/react
-```
-or using npm:
+
+<details open>
+<summary>Using npm</summary>
+
 ```shell
 npm install @fortune-sheet/react
 ```
+</details>
+
+<details>
+<summary>Using pnpm</summary>
+
+```shell
+pnpm install @fortune-sheet/react
+```
+</details>
+
+<details>
+<summary>Using yarn</summary>
+
+```shell
+yarn add @fortune-sheet/react
+```
+</details>
 
 ### Create an HTML placeholder
 ```html
@@ -153,7 +175,7 @@ A working example with `Express` (backend server) and `MongoDB` (data persistenc
 
 Run it with `node index.js` and visit [Collabration example](https://ruilisi.github.io/fortune-sheet-demo/?path=/story/collabration--example) (initialize data by visiting http://localhost:8081/init)
 
-For detailed doc about `Op`, refer to [fortune-sheet-doc](https://ruilisi.github.io/fortune-sheet-docs/guide/op.html)
+For detailed doc about `Op`, refer to [fortune-sheet-doc](./docs/guide/op.md)
 
 ## Migrating data from Luckysheet
 The overall data structure of FortuneSheet is the same as Luckysheet, with some naming differences:
@@ -164,7 +186,7 @@ The overall data structure of FortuneSheet is the same as Luckysheet, with some 
 ## Contributing
 Expected workflow is: Fork -> Patch -> Push -> Pull Request
 
-Please make sure to read the [Contributing Guide](https://ruilisi.github.io/fortune-sheet-docs/guide/contribute.html) before making a pull request.
+Please make sure to read the [Contributing Guide](./docs/guide/contribute.md) before making a pull request.
 
 
 ## Development

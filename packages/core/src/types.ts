@@ -55,6 +55,7 @@ export type Cell = {
     value: string;
     isShow: boolean;
   };
+  hl?: { r: number; c: number; id: string };
 } & CellStyle;
 
 export type CellWithRowAndCol = {
@@ -104,8 +105,8 @@ export type SheetConfig = {
   customWidth?: Record<string, number>;
   borderInfo?: any[]; // 边框
   authority?: any;
-  rowReadOnly?: number[];
-  colReadOnly?: number[];
+  rowReadOnly?: Record<number, number>;
+  colReadOnly?: Record<number, number>;
 };
 
 export type Image = {
@@ -193,6 +194,37 @@ export type LinkCardProps = {
   selectingCellRange?: boolean;
 };
 
+export type RangeDialogProps = {
+  show: boolean;
+  rangeTxt: string;
+  type: string;
+  singleSelect: boolean;
+};
+
+export type DataRegulationProps = {
+  type: string;
+  type2: string;
+  rangeTxt: string;
+  value1: string;
+  value2: string;
+  validity: string;
+  remote: boolean;
+  prohibitInput: boolean;
+  hintShow: boolean;
+  hintValue: string;
+};
+
+export type ConditionRulesProps = {
+  rulesType: string;
+  rulesValue: string;
+  textColor: { check: boolean; color: string };
+  cellColor: { check: boolean; color: string };
+  betweenValue: { value1: string; value2: string };
+  dateValue: string;
+  repeatValue: string;
+  projectValue: string;
+};
+
 export type FilterOptions = {
   startRow: number;
   endRow: number;
@@ -222,6 +254,7 @@ export type Freezen = {
 
 export type GlobalCache = {
   overwriteCell?: boolean;
+  ignoreWriteCell?: boolean;
   doNotFocus?: boolean;
   doNotUpdateCell?: boolean;
   recentTextColor?: string;

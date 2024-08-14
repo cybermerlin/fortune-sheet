@@ -50,7 +50,6 @@
   width: 100%;
   margin-top: 2px;
   display: none;
-  transition: all 0.1s;
   background-color: rgba(76, 76, 76, 0.1);
 }
 
@@ -100,7 +99,6 @@
   height: 100%;
   margin-left: 0px;
   display: none;
-  transition: all 0.1s;
   background-color: rgba(76, 76, 76, 0.1);
 }
 
@@ -113,6 +111,7 @@
   border-width: 0 1px 1px 0;
   padding-left: 0;
   cursor: pointer;
+  background-color: white;
 }
 
 .fortune-add-row-button {
@@ -140,7 +139,6 @@
   margin: 0px 0 0 0px;
   background: rgba(0, 80, 208, 0.15);
   display: none;
-  /*transition: all 0.1s;*/
 }
 
 .fortune-selection-copy {
@@ -183,7 +181,6 @@
   border: 1px dashed #0188fb;
   margin: -1px 0 0 -1px;
   display: none;
-  /*transition: all 0.1s;*/
 }
 
 .fortune-cell-selected-move {
@@ -194,7 +191,6 @@
   border: 2px solid #0188fb;
   margin: -1px 0 0 -1px;
   display: none;
-  /*transition: all 0.1s;*/
 }
 
 .luckysheet-cell-selected {
@@ -469,8 +465,13 @@
 
 .fortune-cols-change-size,
 .fortune-rows-change-size,
-.fortune-change-size-line {
+.fortune-change-size-line,
+.fortune-cols-freeze-handle,
+.fortune-rows-freeze-handle,
+.fortune-freeze-drag-line {
   /*display: none;*/
+  -webkit-user-drag: none;
+  user-select: none;
   position: absolute;
   z-index: 12;
 }
@@ -493,6 +494,33 @@
 
 .fortune-change-size-line {
   border-color: #0188fb;
+  border-style: solid;
+  z-index: 15;
+  cursor: ew-resize;
+}
+
+.fortune-cols-freeze-handle {
+  position: absolute;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background-color: #ddd;
+  cursor: grab;
+  z-index: 20;
+}
+
+.fortune-rows-freeze-handle {
+  position: absolute;
+  top: 0;
+  height: 3px;
+  width: 100%;
+  background-color: #ddd;
+  cursor: grab;
+  z-index: 20;
+}
+
+.fortune-freeze-drag-line {
+  border-color: #ccc;
   border-style: solid;
   z-index: 15;
   cursor: ew-resize;
@@ -549,7 +577,9 @@
   top: 0;
 }
 
-.luckysheet-postil-show-active .luckysheet-postil-dialog-move .luckysheet-postil-dialog-move-item {
+.luckysheet-postil-show-active
+  .luckysheet-postil-dialog-move
+  .luckysheet-postil-dialog-move-item {
   border-color: #0188fb;
 }
 
@@ -839,33 +869,32 @@
 }
 
 .luckysheet-filter-options {
-  color: #897BFF;
+  color: #897bff;
   cursor: pointer;
   position: absolute;
   z-index: 200;
-  border: 1px solid #897BFF;
+  border: 1px solid #897bff;
   border-radius: 3px;
   top: 3px;
   margin-left: 0px;
-  display: 'block';
+  display: "block";
   padding: 0px 4px;
   font-size: 12px;
   height: 15px;
   background: #fff;
-  /* transition: all 0.1s; */
 }
 
 .luckysheet-filter-options:hover {
   color: #fff;
   border: 1px solid #fff;
-  background: #897BFF;
+  background: #897bff;
 }
 
 .luckysheet-filter-options-active {
   color: #fff;
-  border: 1px solid #897BFF;
+  border: 1px solid #897bff;
   padding: 0px 1px;
-  background: #897BFF;
+  background: #897bff;
 }
 
 .caret {
@@ -877,7 +906,7 @@
 }
 
 .caret.down {
-  border-top-color: #897BFF;
+  border-top-color: #897bff;
 }
 
 .luckysheet-filter-options:hover .caret.down {
@@ -886,4 +915,28 @@
 
 .luckysheet-filter-selected {
   background: #ffffff00;
+}
+
+#luckysheet-dataVerification-showHintBox {
+  display: none;
+  padding: 10px;
+  background-color: #ffffff;
+  border: 1px solid #ccc;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  position: absolute;
+  z-index: 1000;
+  user-select: none;
+  cursor: default;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+#luckysheet-dataVerification-dropdown-btn {
+  display: none;
+  width: 20px;
+  height: 20px;
+  background-color: #ffffff;
+  position: absolute;
+  z-index: 10;
+  overflow: hidden;
 }

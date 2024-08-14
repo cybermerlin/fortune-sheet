@@ -86,7 +86,7 @@ export function genarate(value: string | number | boolean) {
       }
     }
     ct = { fa, t: "n" };
-  } else if (value.toString().startsWith("'")) {
+  } else if (value.toString().substring(0, 1) === "'") {
     m = value.toString().substring(1);
     ct = { fa: "@", t: "s" };
   } else if (value.toString().toUpperCase() === "TRUE") {
@@ -113,7 +113,7 @@ export function genarate(value: string | number | boolean) {
     (Math.abs(parseFloat(value as string)) >= 1e11 ||
       Math.abs(parseFloat(value as string)) < 1e-9)
   ) {
-    v = numeral(value).value();
+    v = parseFloat(value as string);
     const str = v.toExponential();
     if (str.indexOf(".") > -1) {
       let strlen = str.split(".")[1].split("e")[0].length;
@@ -246,7 +246,7 @@ export function genarate(value: string | number | boolean) {
       ct = { fa: "@", t: "s" };
     }
   } else if (isRealNum(value)) {
-    m = value.toString();
+    m = parseFloat(value as string).toString();
     ct = { fa: "General", t: "n" };
     v = parseFloat(value as string);
   } else if (
@@ -313,17 +313,6 @@ function fuzzynum(s: string | number) {
   return v;
 }
 
-export function escapeHTML(preValue: string) {
-  let resultValue = preValue;
-  if (!resultValue && typeof resultValue !== "string") return preValue;
-  try {
-    resultValue = resultValue.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  } catch {
-    return preValue;
-  }
-  return resultValue;
-}
-
 export function valueShowEs(r: number, c: number, d: CellMatrix) {
   let value = getCellValue(r, c, d, "m");
   if (value == null) {
@@ -342,7 +331,5 @@ export function valueShowEs(r: number, c: number, d: CellMatrix) {
       value = getCellValue(r, c, d, "v");
     }
   }
-  value = escapeHTML(value);
-
   return value;
 }

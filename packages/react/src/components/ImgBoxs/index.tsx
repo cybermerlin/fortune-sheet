@@ -1,14 +1,17 @@
 import _ from "lodash";
 import { onImageMoveStart, onImageResizeStart } from "@fortune-sheet/core";
-import React, { useContext } from "react";
+import React, { useContext, useMemo } from "react";
 import WorkbookContext from "../../context";
 
 const ImgBoxs: React.FC = () => {
   const { context, setContext, refs } = useContext(WorkbookContext);
+  const activeImg = useMemo(() => {
+    return _.find(context.insertedImgs, { id: context.activeImg });
+  }, [context.activeImg, context.insertedImgs]);
 
   return (
     <div id="luckysheet-image-showBoxs">
-      {context.activeImg && (
+      {activeImg && (
         <div
           id="luckysheet-modal-dialog-activeImage"
           className="luckysheet-modal-dialog"
@@ -16,13 +19,10 @@ const ImgBoxs: React.FC = () => {
             padding: 0,
             position: "absolute",
             zIndex: 300,
-            // width: 100,
-            // height: 100,
-            // left: 100,
-            // top: 100,
-            // backgroundColor: "red",
-            // backgroundImage: `url(${context.activeImg.src})`,
-            ..._.omit(context.activeImg, "src"),
+            width: activeImg.width * context.zoomRatio,
+            height: activeImg.height * context.zoomRatio,
+            left: activeImg.left * context.zoomRatio,
+            top: activeImg.top * context.zoomRatio,
           }}
         >
           <div
@@ -32,11 +32,12 @@ const ImgBoxs: React.FC = () => {
           <div
             className="luckysheet-modal-dialog-content"
             style={{
-              ..._.omit(context.activeImg, "src, left,top"),
-              // height: 200,
-              // width: 200,
-              backgroundImage: `url(${context.activeImg.src})`,
-              backgroundSize: `${context.activeImg.width}px ${context.activeImg.height}px`,
+              width: activeImg.width * context.zoomRatio,
+              height: activeImg.height * context.zoomRatio,
+              backgroundImage: `url(${activeImg.src})`,
+              backgroundSize: `${activeImg.width * context.zoomRatio}px ${
+                activeImg.height * context.zoomRatio
+              }px`,
               backgroundRepeat: "no-repeat",
               // context.activeImg.width * context.zoomRatio +
               // context.activeImg.height * context.zoomRatio,
@@ -60,38 +61,6 @@ const ImgBoxs: React.FC = () => {
                 }}
               />
             ))}
-            {/* <div
-                    className="luckysheet-modal-dialog-resize-item luckysheet-modal-dialog-resize-item-lt"
-                    data-type="lt"
-                  />
-                  <div
-                    className="luckysheet-modal-dialog-resize-item luckysheet-modal-dialog-resize-item-mt"
-                    data-type="mt"
-                  />
-                  <div
-                    className="luckysheet-modal-dialog-resize-item luckysheet-modal-dialog-resize-item-lm"
-                    data-type="lm"
-                  />
-                  <div
-                    className="luckysheet-modal-dialog-resize-item luckysheet-modal-dialog-resize-item-rm"
-                    data-type="rm"
-                  />
-                  <div
-                    className="luckysheet-modal-dialog-resize-item luckysheet-modal-dialog-resize-item-rt"
-                    data-type="rt"
-                  />
-                  <div
-                    className="luckysheet-modal-dialog-resize-item luckysheet-modal-dialog-resize-item-lb"
-                    data-type="lb"
-                  />
-                  <div
-                    className="luckysheet-modal-dialog-resize-item luckysheet-modal-dialog-resize-item-mb"
-                    data-type="mb"
-                  />
-                  <div
-                    className="luckysheet-modal-dialog-resize-item luckysheet-modal-dialog-resize-item-rb"
-                    data-type="rb"
-                  /> */}
           </div>
           <div className="luckysheet-modal-dialog-controll">
             <span
@@ -127,27 +96,29 @@ const ImgBoxs: React.FC = () => {
       <div className="img-list">
         {context.insertedImgs?.map((v: any) => {
           const { id, left, top, width, height, src } = v;
-          if (v.id === context.activeImg?.id) return null;
+          if (v.id === context.activeImg) return null;
           return (
             <div
               id={id}
               key={id}
               className="luckysheet-modal-dialog luckysheet-modal-dialog-image"
               style={{
-                width,
-                height,
+                width: width * context.zoomRatio,
+                height: height * context.zoomRatio,
                 padding: 0,
                 position: "absolute",
-                left,
-                top,
+                left: left * context.zoomRatio,
+                top: top * context.zoomRatio,
                 zIndex: 200,
               }}
+              onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 setContext((ctx) => {
-                  ctx.activeImg = v;
+                  ctx.activeImg = id;
                 });
                 e.stopPropagation();
               }}
+              tabIndex={0}
             >
               <div
                 className="luckysheet-modal-dialog-content"
@@ -162,10 +133,8 @@ const ImgBoxs: React.FC = () => {
                   src={src}
                   alt=""
                   style={{
-                    width,
-                    height,
-                    padding: 0,
-                    position: "absolute",
+                    width: width * context.zoomRatio,
+                    height: height * context.zoomRatio,
                   }}
                 />
               </div>
@@ -231,13 +200,7 @@ const ImgBoxs: React.FC = () => {
         </div>
       </div>
 
-      <div className="cell-date-picker">
-        {/* <input
-            id="cellDatePickerBtn"
-            className="formulaInputFocus"
-            readOnly
-          /> */}
-      </div>
+      <div className="cell-date-picker" />
     </div>
   );
 };

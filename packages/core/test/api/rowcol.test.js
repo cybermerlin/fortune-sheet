@@ -34,7 +34,7 @@ describe("rowcol", () => {
 
   test("insertRowOrColumn", () => {
     const cellTmpl = { ct: { fa: "General", t: "g" }, v: 0, m: "0" };
-    const emptyTmpl = { ct: { fa: "General", t: "g" }, v: "", m: "" };
+    const emptyTmpl = null;
     [
       { t: "row", i: 1, c: 1, d: "lefttop" },
       { t: "row", i: 1, c: 2, d: "lefttop" },
@@ -97,9 +97,10 @@ describe("rowcol", () => {
       { type: "column", start: 1, end: 1, rawData: rawDataSecond },
     ].forEach((k) => {
       ctx.luckysheetfile[0].data = k.rawData();
+      const slen = k.end - k.start + 1;
       deleteRowOrColumn(ctx, k.type, k.start, k.end);
-      _.range(0, k.rawData().length).forEach((i) => {
-        _.range(0, k.rawData()[0].length).forEach((j) => {
+      _.range(0, k.rawData().length - slen).forEach((i) => {
+        _.range(0, k.rawData()[0].length - slen).forEach((j) => {
           let expectedValue;
           if (k.type === "row") {
             expectedValue = () => {

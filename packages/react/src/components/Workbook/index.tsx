@@ -16,6 +16,10 @@ import {
   inverseRowColOptions,
   ensureSheetIndex,
   CellMatrix,
+  insertRowCol,
+  locale,
+  calcSelectionInfo,
+  groupValuesRefresh,
 } from "@fortune-sheet/core";
 import React, {
   useMemo,
@@ -34,7 +38,7 @@ import produce, {
 } from "immer";
 import _ from "lodash";
 import Sheet from "../Sheet";
-import WorkbookContext, { SetContextOptions } from "../../context";
+import WorkbookContext, { RefValues, SetContextOptions } from "../../context";
 import Toolbar from "../Toolbar";
 import FxEditor from "../FxEditor";
 import SheetTab from "../SheetTab";
@@ -56,9 +60,23 @@ type AdditionalProps = {
   onOp?: (op: Op[]) => void;
 };
 
+const triggerGroupValuesRefresh = (ctx: Context) => {
+  if (ctx.groupValuesRefreshData.length > 0) {
+    groupValuesRefresh(ctx);
+  }
+};
+
+const concatProducer = (...producers: ((ctx: Context) => void)[]) => {
+  return (ctx: Context) => {
+    producers.forEach((producer) => {
+      producer(ctx);
+    });
+  };
+};
+
 const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
   ({ onChange, onOp, data: originalData, ...props }, ref) => {
-    const [context, setContext] = useState(defaultContext());
+    const globalCache = useRef<GlobalCache>({ undoList: [], redoList: [] });
     const cellInput = useRef<HTMLDivElement>(null);
     const fxInput = useRef<HTMLDivElement>(null);
     const canvas = useRef<HTMLCanvasElement>(null);
@@ -66,9 +84,42 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
     const scrollbarY = useRef<HTMLDivElement>(null);
     const cellArea = useRef<HTMLDivElement>(null);
     const workbookContainer = useRef<HTMLDivElement>(null);
-    const globalCache = useRef<GlobalCache>({ undoList: [], redoList: [] });
+
+    const refs: RefValues = useMemo(
+      () => ({
+        globalCache: globalCache.current,
+        cellInput,
+        fxInput,
+        canvas,
+        scrollbarX,
+        scrollbarY,
+        cellArea,
+        workbookContainer,
+      }),
+      []
+    );
+
+    const [context, setContext] = useState(defaultContext(refs));
+    const { formula } = locale(context);
+
     const [moreToolbarItems, setMoreToolbarItems] =
       useState<React.ReactNode>(null);
+
+    const [calInfo, setCalInfo] = useState<{
+      numberC: number;
+      count: number;
+      sum: number;
+      max: number;
+      min: number;
+      average: string;
+    }>({
+      numberC: 0,
+      count: 0,
+      sum: 0,
+      max: 0,
+      min: 0,
+      average: "",
+    });
 
     const mergedSettings = useMemo(
       () => _.assign(_.cloneDeep(defaultSettings), props) as Required<Settings>,
@@ -76,6 +127,17 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
       [..._.values(props)]
     );
+
+    // 计算选区的信息
+    useEffect(() => {
+      const selection = context.luckysheet_select_save;
+      const { lang } = props;
+      if (selection) {
+        const re = calcSelectionInfo(context, lang);
+        setCalInfo(re);
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [context.luckysheet_select_save]);
 
     const initSheetData = useCallback(
       (
@@ -199,7 +261,7 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
         setContext((ctx_) => {
           const [result, patches, inversePatches] = produceWithPatches(
             ctx_,
-            recipe
+            concatProducer(recipe, triggerGroupValuesRefresh)
           );
           if (patches.length > 0 && !options.noHistory) {
             if (options.logPatch) {
@@ -344,18 +406,16 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
         settings: mergedSettings,
         handleUndo,
         handleRedo,
-        refs: {
-          globalCache: globalCache.current,
-          cellInput,
-          fxInput,
-          canvas,
-          scrollbarX,
-          scrollbarY,
-          cellArea,
-          workbookContainer,
-        },
+        refs,
       }),
-      [context, handleRedo, handleUndo, mergedSettings, setContextWithProduce]
+      [
+        context,
+        handleRedo,
+        handleUndo,
+        mergedSettings,
+        refs,
+        setContextWithProduce,
+      ]
     );
 
     useEffect(() => {
@@ -370,9 +430,6 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
           draftCtx.defaultcolumnNum = mergedSettings.column;
           draftCtx.defaultrowNum = mergedSettings.row;
           draftCtx.defaultFontSize = mergedSettings.defaultFontSize;
-          draftCtx.rowHeaderWidth = mergedSettings.rowHeaderWidth || 1.5;
-          draftCtx.columnHeaderHeight =
-            mergedSettings.columnHeaderHeight || 1.5;
           if (_.isEmpty(draftCtx.luckysheetfile)) {
             const newData = produce(originalData, (draftData) => {
               ensureSheetIndex(draftData, mergedSettings.generateSheetId);
@@ -384,7 +441,9 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
               initSheetData(draftCtx, sheet, index);
             });
           }
-          draftCtx.devicePixelRatio = mergedSettings.devicePixelRatio;
+          if (mergedSettings.devicePixelRatio > 0) {
+            draftCtx.devicePixelRatio = mergedSettings.devicePixelRatio;
+          }
           draftCtx.lang = mergedSettings.lang;
           draftCtx.allowEdit = mergedSettings.allowEdit;
           draftCtx.hooks = mergedSettings.hooks;
@@ -445,6 +504,10 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
           draftCtx.insertedImgs = sheet.images;
 
           draftCtx.zoomRatio = _.isNil(sheet.zoomRatio) ? 1 : sheet.zoomRatio;
+          draftCtx.rowHeaderWidth =
+            mergedSettings.rowHeaderWidth * draftCtx.zoomRatio;
+          draftCtx.columnHeaderHeight =
+            mergedSettings.columnHeaderHeight * draftCtx.zoomRatio;
 
           if (!_.isNil(sheet.defaultRowHeight)) {
             draftCtx.defaultrowlen = Number(sheet.defaultRowHeight);
@@ -509,6 +572,24 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
     const onKeyDown = useCallback(
       (e: React.KeyboardEvent<HTMLDivElement>) => {
         const { nativeEvent } = e;
+        // handling undo and redo ahead because handleUndo and handleRedo
+        // themselves are calling setContext, and should not be nested
+        // in setContextWithProduce.
+        if ((e.ctrlKey || e.metaKey) && e.code === "KeyZ") {
+          if (e.shiftKey) {
+            handleRedo();
+          } else {
+            handleUndo();
+          }
+          e.stopPropagation();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.code === "KeyY") {
+          handleRedo();
+          e.stopPropagation();
+          e.preventDefault();
+          return;
+        }
         setContextWithProduce((draftCtx) => {
           handleGlobalKeyDown(
             draftCtx,
@@ -516,8 +597,9 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
             fxInput.current!,
             nativeEvent,
             globalCache.current!,
-            handleUndo,
-            handleRedo
+            handleUndo, // still passing handleUndo and handleRedo here to satisfy API
+            handleRedo,
+            canvas.current!.getContext("2d")!
           );
         });
       },
@@ -531,6 +613,54 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
           cellInput.current === document.activeElement ||
           document.activeElement?.className === "fortune-sheet-overlay"
         ) {
+          let { clipboardData } = e;
+          if (!clipboardData) {
+            // @ts-ignore
+            // for IE
+            clipboardData = window.clipboardData;
+          }
+          const txtdata =
+            clipboardData!.getData("text/html") ||
+            clipboardData!.getData("text/plain");
+          const ele = document.createElement("div");
+          ele.innerHTML = txtdata;
+
+          const trList = ele.querySelectorAll("table tr");
+          const maxRow =
+            trList.length + context.luckysheet_select_save![0].row[0];
+          const rowToBeAdded =
+            maxRow -
+            context.luckysheetfile[
+              getSheetIndex(
+                context,
+                context!.currentSheetId! as string
+              ) as number
+            ].data!.length;
+          const range = context.luckysheet_select_save;
+          if (rowToBeAdded > 0) {
+            const insertRowColOp: SetContextOptions["insertRowColOp"] = {
+              type: "row",
+              index:
+                context.luckysheetfile[
+                  getSheetIndex(
+                    context,
+                    context!.currentSheetId! as string
+                  ) as number
+                ].data!.length - 1,
+              count: rowToBeAdded,
+              direction: "rightbottom",
+              id: context.currentSheetId,
+            };
+            setContextWithProduce(
+              (draftCtx) => {
+                insertRowCol(draftCtx, insertRowColOp);
+                draftCtx.luckysheet_select_save = range;
+              },
+              {
+                insertRowColOp,
+              }
+            );
+          }
           setContextWithProduce((draftCtx) => {
             try {
               handlePaste(draftCtx, e);
@@ -540,7 +670,7 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
           });
         }
       },
-      [setContextWithProduce]
+      [context, setContextWithProduce]
     );
 
     const onMoreToolbarItemsClose = useCallback(() => {
@@ -561,15 +691,14 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
         generateAPIs(
           context,
           setContextWithProduce,
-          emitOp,
-          setContext,
-          globalCache.current,
+          handleUndo,
+          handleRedo,
           mergedSettings,
           cellInput.current,
           scrollbarX.current,
           scrollbarY.current
         ),
-      [context, mergedSettings, setContextWithProduce, emitOp]
+      [context, setContextWithProduce, handleUndo, handleRedo, mergedSettings]
     );
 
     const i = getSheetIndex(context, context.currentSheetId);
@@ -614,7 +743,7 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
               <div
                 onMouseDown={() => {
                   setContextWithProduce((draftCtx) => {
-                    draftCtx.contextMenu = undefined;
+                    draftCtx.contextMenu = {};
                     draftCtx.filterContextMenu = undefined;
                     draftCtx.showSheetList = undefined;
                   });
@@ -628,6 +757,35 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
                 className="fortune-popover-backdrop"
               />
             )}
+            <div className="fortune-stat-area">
+              <div className="luckysheet-sheet-selection-calInfo">
+                {!!calInfo.count && (
+                  <div style={{ width: "60px" }}>
+                    {formula.count}: {calInfo.count}
+                  </div>
+                )}
+                {!!calInfo.numberC && !!calInfo.sum && (
+                  <div>
+                    {formula.sum}: {calInfo.sum}
+                  </div>
+                )}
+                {!!calInfo.numberC && !!calInfo.average && (
+                  <div>
+                    {formula.average}: {calInfo.average}
+                  </div>
+                )}
+                {!!calInfo.numberC && !!calInfo.max && (
+                  <div>
+                    {formula.max}: {calInfo.max}
+                  </div>
+                )}
+                {!!calInfo.numberC && !!calInfo.min && (
+                  <div>
+                    {formula.min}: {calInfo.min}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </ModalProvider>
       </WorkbookContext.Provider>

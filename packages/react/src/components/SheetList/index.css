@@ -4,8 +4,8 @@
   min-width: 120px;
   position: absolute;
   z-index: 10002;
-  bottom: 31px;
-  left: 72px;
+  bottom: 53px;
+  margin-left: 72px;
   max-height: 60%;
 }
 
@@ -31,7 +31,7 @@
 }
 
 .fortune-sheet-list :hover {
-  background-color: #EFEFEF;
+  background-color: #efefef;
 }
 
 .fortune-sheet-hidden-button {
@@ -43,7 +43,7 @@
 }
 
 .fortune-sheet-hidden-button :hover {
-  background-color: #D0D0D0;
+  background-color: #d0d0d0;
 }
 
 .fortune-sheet-selected-check-sapce {

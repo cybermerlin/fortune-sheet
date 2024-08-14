@@ -9,8 +9,9 @@ import {
   getMeasureText,
 } from "./modules/text";
 import { isInlineStringCell } from "./modules/inline-string";
-import { indexToColumnChar } from "./utils";
+import { getSheetIndex, indexToColumnChar } from "./utils";
 import { getBorderInfoComputeRange } from "./modules/border";
+import { checkCF, getComputeMap, validateCellData } from "./modules";
 
 export const defaultStyle = {
   fillStyle: "#000000",
@@ -34,11 +35,8 @@ function getCfIconsImg() {
   return cfIconsImg;
 }
 
-function getBorderFix(d: any, r: any, c: any) {
-  if (_.isEmpty(d[r][c]?.bg)) {
-    return [-1, 0, 0, -1];
-  }
-  return [-2, -1, 1, 0];
+function getBorderFix() {
+  return [-1, 0, 0, -1];
 }
 
 function setLineDash(
@@ -788,7 +786,7 @@ export class Canvas {
 
     // 条件格式计算
     // const cfCompute = conditionformat.getComputeMap();
-    const cfCompute: any = {};
+    const cfCompute: any = getComputeMap(this.sheetCtx);
 
     // 表格渲染区域 溢出单元格配置保存
     const cellOverflowMap = this.getCellOverflowMap(
@@ -1615,24 +1613,24 @@ export class Canvas {
     isMerge = false
   ) {
     // const checksAF = alternateformat.checksAF(r, c, afCompute); // 交替颜色
-    // const checksCF = conditionformat.checksCF(r, c, cfCompute); // 条件格式
+    const checksCF = checkCF(r, c, cfCompute); // 条件格式
     const flowdata = getFlowdata(this.sheetCtx);
     if (!flowdata) return;
 
-    const borderfix = getBorderFix(flowdata, r, c);
+    const borderfix = getBorderFix();
 
     // // 背景色
-    const fillStyle = normalizedAttr(flowdata, r, c, "bg");
+    let fillStyle = normalizedAttr(flowdata, r, c, "bg");
 
     // if (checksAF?.[1] {
     //   // 交替颜色
     //   fillStyle = checksAF[1];
     // }
 
-    // if (checksCF?.cellColor) {
-    //   // 条件格式
-    //   fillStyle = checksCF.cellColor;
-    // }
+    if (!_.isNil(checksCF) && !_.isNil(checksCF.cellColor)) {
+      // 条件格式
+      fillStyle = checksCF.cellColor;
+    }
 
     // if (flowdata?.[r]?.[c]?.tc) {
     //   // 标题色
@@ -1645,14 +1643,11 @@ export class Canvas {
       renderCtx.fillStyle = fillStyle;
     }
 
-    // 这里计算canvas需要绘制的矩形范围时,需要留下原本单元格边框的位置
-    // 让 fillRect 绘制矩形的起始xy坐标增加1,绘制长宽减少2
-
     const cellsize = [
-      startX + offsetLeft + borderfix[0] + 1,
-      startY + offsetTop + borderfix[1] + 1,
-      endX - startX + borderfix[2] - (isMerge ? 1 : 0) - 2,
-      endY - startY + borderfix[3] - 2,
+      startX + offsetLeft + borderfix[0],
+      startY + offsetTop + borderfix[1],
+      endX - startX + borderfix[2] - (isMerge ? 1 : 0),
+      endY - startY + borderfix[3],
     ];
 
     // 单元格渲染前，考虑到合并单元格会再次渲染一遍，统一放到这里
@@ -1835,35 +1830,31 @@ export class Canvas {
     // const checksAF = alternateformat.checksAF(r, c, afCompute);
     const checksAF: any = {};
     // 条件格式
-    // const checksCF = conditionformat.checksCF(r, c, cfCompute);
-    const checksCF: any = {};
+    const checksCF = checkCF(r, c, cfCompute);
 
     // 单元格 背景颜色
-    const fillStyle = normalizedAttr(flowdata, r, c, "bg");
+    let fillStyle = normalizedAttr(flowdata, r, c, "bg");
     // if (checksAF?.[1]) {
     //   // 若单元格有交替颜色 背景颜色
     //   fillStyle = checksAF[1];
     // }
-    // if (checksCF?.cellColor) {
-    //   // 若单元格有条件格式 背景颜色
-    //   fillStyle = checksCF.cellColor;
-    // }
+    if (!_.isNil(checksCF) && !_.isNil(checksCF.cellColor)) {
+      // 若单元格有条件格式 背景颜色
+      fillStyle = checksCF.cellColor;
+    }
     if (!fillStyle) {
       renderCtx.fillStyle = "#FFFFFF";
     } else {
       renderCtx.fillStyle = fillStyle;
     }
 
-    const borderfix = getBorderFix(flowdata, r, c);
-
-    // 这里计算canvas需要绘制的矩形范围时,需要留下原本单元格边框的位置
-    // 让 fillRect 绘制矩形的起始xy坐标增加1,绘制长宽减少2
+    const borderfix = getBorderFix();
 
     const cellsize = [
-      startX + offsetLeft + borderfix[0] + 1,
-      startY + offsetTop + borderfix[1] + 1,
-      endX - startX + borderfix[2] - (isMerge ? 1 : 0) - 2,
-      endY - startY + borderfix[3] - 2,
+      startX + offsetLeft + borderfix[0],
+      startY + offsetTop + borderfix[1],
+      endX - startX + borderfix[2] - (isMerge ? 1 : 0),
+      endY - startY + borderfix[3],
     ];
 
     // 单元格渲染前，考虑到合并单元格会再次渲染一遍，统一放到这里
@@ -1887,15 +1878,17 @@ export class Canvas {
     renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
 
     // const { dataVerification } = dataVerificationCtrl;
-    const dataVerification: any = {};
 
-    /*
+    const index = getSheetIndex(
+      this.sheetCtx,
+      this.sheetCtx.currentSheetId
+    ) as number;
+
+    const { dataVerification } = this.sheetCtx.luckysheetfile[index];
+
     if (
       dataVerification?.[`${r}_${c}`] &&
-      !dataVerificationCtrl.validateCellData(
-        value,
-        dataVerification[`${r}_${c}`]
-      )
+      !validateCellData(this.sheetCtx, dataVerification[`${r}_${c}`], value)
     ) {
       // 单元格左上角红色小三角标示
       const dv_w = 5 * this.sheetCtx.zoomRatio;
@@ -1909,7 +1902,6 @@ export class Canvas {
       renderCtx.fill();
       renderCtx.closePath();
     }
-    */
 
     // 若单元格有批注（单元格右上角红色小三角标示）
     if (cell?.ps) {
@@ -2395,7 +2387,7 @@ export class Canvas {
     const checksAF: any = {};
     // 条件格式
     // const checksCF = conditionformat.checksCF(r, c, cfCompute);
-    const checksCF: any = {};
+    const checksCF: any = checkCF(r, c, cfCompute);
 
     // 单元格 文本颜色
     renderCtx.fillStyle = normalizedAttr(flowdata, r, c, "fc");

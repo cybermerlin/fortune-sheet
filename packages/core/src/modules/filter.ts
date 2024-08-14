@@ -1,13 +1,14 @@
 import _ from "lodash";
 import { locale } from "../locale";
 import { Context, getFlowdata } from "../context";
-import { Cell } from "../types";
-import { getSheetIndex, rgbToHex } from "../utils";
+import { Cell, CellMatrix } from "../types";
+import { getSheetIndex, isAllowEdit, rgbToHex } from "../utils";
 import { update } from "./format";
 import { normalizeSelection } from "./selection";
 import { isRealNull } from "./validation";
 import { normalizedAttr } from "./cell";
-import { orderbydata } from "./sort";
+import { sortDataRange } from "./sort";
+import { checkCF, getComputeMap } from "./ConditionFormat";
 
 // 筛选配置状态
 export function labelFilterOptionState(
@@ -80,10 +81,10 @@ export function orderbydatafiler(
   str += 1;
 
   let hasMc = false; // 排序选区是否有合并单元格
-  let data = [];
+  const data: CellMatrix = [];
 
   for (let r = str; r <= edr; r += 1) {
-    const data_row = [];
+    const data_row: (Cell | null)[] = [];
 
     for (let c = stc; c <= edc; c += 1) {
       if (d[r][c] != null && d[r][c]?.mc != null) {
@@ -107,27 +108,9 @@ export function orderbydatafiler(
     // }
   }
 
-  data = orderbydata(asc, curr - stc, data);
+  sortDataRange(ctx, d, data, curr - stc, asc, str, edr, stc, edc);
 
-  for (let r = str; r <= edr; r += 1) {
-    for (let c = stc; c <= edc; c += 1) {
-      d[r][c] = data[r - str][c - stc];
-    }
-  }
   return null;
-
-  // let allParam = {};
-  // if (ctx.config.rowlen != null) {
-  //   let cfg = _.assign({}, ctx.config);
-  //   cfg = rowlenByRange(d, str, edr, cfg);
-
-  //   allParam = {
-  //     cfg,
-  //     RowlChange: true,
-  //   };
-  // }
-
-  // jfrefreshgrid(d, [{ row: [str, edr], column: [stc, edc] }], allParam);
 }
 
 // 创建筛选配置
@@ -145,7 +128,9 @@ export function createFilterOptions(
 ) {
   // $(`#luckysheet-filter-selected-sheet${ctx.currentSheetIndex}`).remove();
   // $(`#luckysheet-filter-options-sheet${ctx.currentSheetIndex}`).remove();
-  if (ctx.allowEdit === false) return;
+  // eslint-disable-next-line no-undef
+  const allowEdit = isAllowEdit(ctx);
+  if (!allowEdit) return;
   if (sheetId != null && sheetId !== ctx.currentSheetId) return;
   const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
   if (sheetIndex == null) return;
@@ -159,11 +144,10 @@ export function createFilterOptions(
   const c1 = luckysheet_filter_save.column[0];
   const c2 = luckysheet_filter_save.column[1];
 
-  const row = ctx.visibledatarow[r2];
-  const row_pre = r1 - 1 === -1 ? 0 : ctx.visibledatarow[r1 - 1];
-  const col = ctx.visibledatacolumn[c2];
-  const col_pre = c1 - 1 === -1 ? 0 : ctx.visibledatacolumn[c1 - 1];
-
+  const row = ctx.visibledatarow[r2] ?? 0;
+  const row_pre = r1 - 1 === -1 ? 0 : ctx.visibledatarow[r1 - 1] ?? 0;
+  const col = ctx.visibledatacolumn[c2] ?? 0;
+  const col_pre = c1 - 1 === -1 ? 0 : ctx.visibledatacolumn[c1 - 1] ?? 0;
   const options = {
     startRow: r1,
     endRow: r2,
@@ -181,9 +165,13 @@ export function createFilterOptions(
     if (filterObj == null || filterObj?.[c - c1] == null) {
     } else {
     }
+    let left = 0;
+    if (ctx.visibledatacolumn[c]) {
+      left = ctx.visibledatacolumn[c] - 20;
+    }
     options.items.push({
       col: c,
-      left: ctx.visibledatacolumn[c] - 20,
+      left,
       top: row_pre,
     });
   }
@@ -196,7 +184,8 @@ export function createFilterOptions(
 }
 
 export function clearFilter(ctx: Context) {
-  if (ctx.allowEdit === false) return;
+  const allowEdit = isAllowEdit(ctx);
+  if (!allowEdit) return;
   const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
   const hiddenRows = _.reduce(
     ctx.filter,
@@ -516,7 +505,7 @@ export function getFilterColumnColors(
   const fcMap: Map<string, FilterColor> = new Map(); // 字体颜色
 
   // const af_compute = alternateformat.getComputeMap();
-  // const cf_compute = conditionformat.getComputeMap();
+  const cf_compute: any = getComputeMap(ctx);
   const flowdata = getFlowdata(ctx);
   if (flowdata == null) return { bgColors: [], fcColors: [] };
 
@@ -537,8 +526,7 @@ export function getFilterColumnColors(
       [, bg] = checksAF;
     }
 
-    // const checksCF = conditionformat.checksCF(r, col, cf_compute);
-    const checksCF: any = {};
+    const checksCF = checkCF(r, col, cf_compute);
     if (checksCF != null && checksCF.cellColor != null) {
       // 若单元格有条件格式
       bg = checksCF.cellColor;

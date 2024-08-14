@@ -24,7 +24,7 @@ const SearchReplace: React.FC<{
   const { findAndReplace, button } = locale(context);
   const [searchText, setSearchText] = useState("");
   const [replaceText, setReplaceText] = useState("");
-  const [showReplace, setShowReplace] = useState(false);
+  const [showReplace, setShowReplace] = useState(context.showReplace);
   const [searchResult, setSearchResult] = useState<SearchResult[]>([]);
   const [selectedCell, setSelectedCell] = useState<{ r: number; c: number }>();
   const { showAlert } = useAlert();
@@ -37,7 +37,8 @@ const SearchReplace: React.FC<{
   const closeDialog = useCallback(() => {
     _.set(refs.globalCache, "searchDialog.mouseEnter", false);
     setContext((draftCtx) => {
-      draftCtx.showSearchReplace = false;
+      draftCtx.showSearch = false;
+      draftCtx.showReplace = false;
     });
   }, [refs.globalCache, setContext]);
 
@@ -61,8 +62,8 @@ const SearchReplace: React.FC<{
 
   return (
     <div
-      id="fortunesheet-search-replace"
-      className="fortunesheet-search-replace fortune-dialog"
+      id="fortune-search-replace"
+      className="fortune-search-replace fortune-dialog"
       style={getInitialPosition(getContainer())}
       onMouseEnter={() => {
         _.set(refs.globalCache, "searchDialog.mouseEnter", true);
@@ -80,6 +81,7 @@ const SearchReplace: React.FC<{
         <div
           className="icon-close fortune-modal-dialog-icon-close"
           onClick={closeDialog}
+          tabIndex={0}
         >
           <SVGIcon name="close" style={{ padding: 7, cursor: "pointer" }} />
         </div>
@@ -88,6 +90,7 @@ const SearchReplace: React.FC<{
             id="searchTab"
             className={showReplace ? "" : "on"}
             onClick={() => setShowReplace(false)}
+            tabIndex={0}
           >
             {findAndReplace.find}
           </span>
@@ -95,6 +98,7 @@ const SearchReplace: React.FC<{
             id="replaceTab"
             className={showReplace ? "on" : ""}
             onClick={() => setShowReplace(true)}
+            tabIndex={0}
           >
             {findAndReplace.replace}
           </span>
@@ -169,6 +173,7 @@ const SearchReplace: React.FC<{
                       showAlert(alertMsg);
                     });
                   }}
+                  tabIndex={0}
                 >
                   {findAndReplace.allReplaceBtn}
                 </div>
@@ -189,6 +194,7 @@ const SearchReplace: React.FC<{
                       }
                     })
                   }
+                  tabIndex={0}
                 >
                   {findAndReplace.replaceBtn}
                 </div>
@@ -206,6 +212,7 @@ const SearchReplace: React.FC<{
                   if (_.isEmpty(res)) showAlert(findAndReplace.noFindTip);
                 })
               }
+              tabIndex={0}
             >
               {findAndReplace.allFindBtn}
             </div>
@@ -219,6 +226,7 @@ const SearchReplace: React.FC<{
                   if (alertMsg != null) showAlert(alertMsg);
                 })
               }
+              tabIndex={0}
             >
               {findAndReplace.findBtn}
             </div>
@@ -227,6 +235,7 @@ const SearchReplace: React.FC<{
         <div
           className="close-button fortune-message-box-button button-default"
           onClick={closeDialog}
+          tabIndex={0}
         >
           {button.close}
         </div>
@@ -260,6 +269,7 @@ const SearchReplace: React.FC<{
                       });
                       setSelectedCell({ r: v.r, c: v.c });
                     }}
+                    tabIndex={0}
                   >
                     <span>{v.sheetName}</span>
                     <span>{v.cellPosition}</span>

@@ -4,6 +4,10 @@ export default {
       "No se puede realizar esta operación en celdas parcialmente unidas",
     readOnlyError: "No se puede realizar esto en modo de solo lectura",
     dataNullError: "No se puede hacer esto con datos que no existen",
+    noSeletionError:
+      "The selection operation has not been performed yetLa operación de selección aún no se ha realizado",
+    cannotSelectMultiple:
+      "No se puede seleccionar la zona de selección múltiple",
   },
   functionlist: [
     {
@@ -10894,6 +10898,7 @@ export default {
     },
   ],
   toolbar: {
+    toolbar: "Barra de herramientas",
     undo: "Deshacer",
     redo: "Rehacer",
     paintFormat: "Clonar formato",
@@ -11475,6 +11480,17 @@ export default {
     generateNewMatrix: "Generar nueva matriz",
     noMulti:
       "No se puede realizar esta operación en varias áreas de selección, selecciona una sola área",
+    cannotDeleteAllRow: "No se pueden eliminar todas las filas",
+    cannotDeleteAllColumn: "No se pueden eliminar todas las columnas",
+    cannotDeleteRowReadOnly: "No se puede eliminar la fila de solo lectura",
+    cannotDeleteColumnReadOnly:
+      "No se puede eliminar la columna de solo lectura",
+    cannotInsertOnRowReadOnly:
+      "No se puede insertar en una fila de solo lectura",
+    cannotInsertOnColumnReadOnly:
+      "No se puede insertar en la columna de solo lectura",
+    rowOverLimit: "Límite de 10000 filas excedido",
+    columnOverLimit: "Límite de 1000 columnas excedido",
   },
   comment: {
     insert: "Insertar",
@@ -11610,6 +11626,7 @@ export default {
     resetColor: "Reiniciar color",
     cancelText: "Cancelar",
     chooseText: "Confirmar color",
+    focus: "Enfocar",
 
     tipNameRepeat:
       "¡El nombre de la página de la pestaña no se puede repetir! Revísalo",
@@ -11628,8 +11645,8 @@ export default {
     conditionformat_greaterThan_title: "Dar formato a celdas mayores que",
     conditionformat_lessThan: "Conditionformat-LessThan",
     conditionformat_lessThan_title: "Dar formato a celdas más pequeñas que",
-    conditionformat_betweenness: "Conditionformat-Betweenness",
-    conditionformat_betweenness_title: "Dar formato a celdas con valores entre",
+    conditionformat_between: "Conditionformat-Betweenness",
+    conditionformat_between_title: "Dar formato a celdas con valores entre",
     conditionformat_equal: "Conditionformat-Equal",
     conditionformat_equal_title: "Dar formato a celdas iguales a",
     conditionformat_textContains: "Conditionformat-TextContains",
@@ -11648,11 +11665,11 @@ export default {
     conditionformat_last10_percent: "Conditionformat-Last10%",
     conditionformat_last10_title:
       "Formatea las celdas con el valor más pequeño",
-    conditionformat_AboveAverage: "Conditionformat-AboveAverage",
-    conditionformat_AboveAverage_title:
+    conditionformat_aboveAverage: "Conditionformat-AboveAverage",
+    conditionformat_aboveAverage_title:
       "Dar formato a celdas por encima del promedio",
-    conditionformat_SubAverage: "Conditionformat-SubAverage",
-    conditionformat_SubAverage_title:
+    conditionformat_belowAverage: "Conditionformat-SubAverage",
+    conditionformat_belowAverage_title:
       "Dar formato a celdas por debajo del promedio",
     rule: "Regla",
     newRule: "Nueva regla",
@@ -11737,7 +11754,7 @@ export default {
     pleaseSelectIcon: "Haz clic para seleccionar un grupo de iconos:",
     cellValue: "Valor de celda",
     specificText: "Texto específico",
-    occurrence: "Fecha",
+    occurrenceDate: "Fecha",
     greaterThan: "Mayor que",
     lessThan: "Menor que",
     between: "Entre",

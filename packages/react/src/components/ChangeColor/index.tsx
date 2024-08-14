@@ -33,8 +33,12 @@ export const ChangeColor: React.FC<Props> = ({ triggerParentUpdate }) => {
   }, [selectColor, setContext]);
 
   return (
-    <div id="fortunesheet-change-color">
-      <div className="color-reset" onClick={() => setSelectColor(undefined)}>
+    <div id="fortune-change-color">
+      <div
+        className="color-reset"
+        onClick={() => setSelectColor(undefined)}
+        tabIndex={0}
+      >
         {sheetconfig.resetColor}
       </div>
       <div className="custom-color">
@@ -55,6 +59,7 @@ export const ChangeColor: React.FC<Props> = ({ triggerParentUpdate }) => {
           onClick={() => {
             certainBtn();
           }}
+          tabIndex={0}
         >
           {button.confirm}
         </div>

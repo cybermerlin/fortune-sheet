@@ -2,12 +2,16 @@ import _ from "lodash";
 import { Context, getFlowdata } from "../context";
 import { Cell, CellMatrix, Range, Selection, SingleRange } from "../types";
 import { getSheetIndex, indexToColumnChar, rgbToHex } from "../utils";
-import { escapeHTML, genarate, update } from "./format";
+import { checkCF, getComputeMap } from "./ConditionFormat";
+import { getFailureText, validateCellData } from "./dataVerification";
+import { genarate, update } from "./format";
 import {
   delFunctionGroup,
   execfunction,
   execFunctionGroup,
   functionHTMLGenerate,
+  getcellrange,
+  iscelldata,
 } from "./formula";
 import {
   attrToCssName,
@@ -16,6 +20,7 @@ import {
   isInlineStringCT,
 } from "./inline-string";
 import { isRealNull, isRealNum, valueIsError } from "./validation";
+import { getCellTextInfo } from "./text";
 
 // TODO put these in context ref
 // let rangestart = false;
@@ -39,11 +44,11 @@ export function normalizedCellAttr(
     if (value?.indexOf("rgba") > -1) {
       value = rgbToHex(value);
     }
-  } else if (attr.startsWith("bs")) {
+  } else if (attr.substring(0, 2) === "bs") {
     value ||= "none";
   } else if (attr === "ht" || attr === "vt") {
     const defaultValue = attr === "ht" ? "1" : "0";
-    value = value ? value.toString() : defaultValue;
+    value = !_.isNil(value) ? value.toString() : defaultValue;
     if (["0", "1", "2"].indexOf(value.toString()) === -1) {
       value = defaultValue;
     }
@@ -202,17 +207,24 @@ export function setCellValue(
     cell.m = vupdateStr;
     cell.ct = { fa: "@", t: "s" };
     cell.v = vupdateStr;
-  } else if (vupdateStr.toUpperCase() === "TRUE") {
+  } else if (
+    vupdateStr.toUpperCase() === "TRUE" &&
+    (_.isNil(cell.ct?.fa) || cell.ct?.fa !== "@")
+  ) {
     cell.m = "TRUE";
     cell.ct = { fa: "General", t: "b" };
     cell.v = true;
-  } else if (vupdateStr.toUpperCase() === "FALSE") {
+  } else if (
+    vupdateStr.toUpperCase() === "FALSE" &&
+    (_.isNil(cell.ct?.fa) || cell.ct?.fa !== "@")
+  ) {
     cell.m = "FALSE";
     cell.ct = { fa: "General", t: "b" };
     cell.v = false;
   } else if (
     vupdateStr.substr(-1) === "%" &&
-    isRealNum(vupdateStr.substring(0, vupdateStr.length - 1))
+    isRealNum(vupdateStr.substring(0, vupdateStr.length - 1)) &&
+    (_.isNil(cell.ct?.fa) || cell.ct?.fa !== "@")
   ) {
     cell.ct = { fa: "0%", t: "n" };
     cell.v = vupdateStr.substring(0, vupdateStr.length - 1) / 100;
@@ -272,6 +284,14 @@ export function setCellValue(
     } else if (!_.isNil(cell.ct) && cell.ct.fa === "@") {
       cell.m = vupdateStr;
       cell.v = vupdate;
+    } else if (cell.ct != null && cell.ct.t === "d" && _.isString(vupdate)) {
+      const mask = genarate(vupdate) as any;
+      if (mask[1].t !== "d" || mask[1].fa === cell.ct.fa) {
+        [cell.m, cell.ct, cell.v] = mask;
+      } else {
+        [, , cell.v] = mask;
+        cell.m = update(cell.ct.fa!, cell.v);
+      }
     } else if (
       !_.isNil(cell.ct) &&
       !_.isNil(cell.ct.fa) &&
@@ -656,7 +676,8 @@ export function updateCell(
   r: number,
   c: number,
   $input?: HTMLDivElement | null,
-  value?: any
+  value?: any,
+  canvas?: CanvasRenderingContext2D
 ) {
   let inputText = $input?.innerText;
   const inputHtml = $input?.innerHTML;
@@ -672,22 +693,23 @@ export function updateCell(
   // }
 
   // 数据验证 输入数据无效时禁止输入
-  /*
-  if (!_.isNil(dataVerificationCtrl.dataVerification)) {
-    const dvItem = dataVerificationCtrl.dataVerification[`${r}_${c}`];
-
+  const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+  const { dataVerification } = ctx.luckysheetfile[index];
+  if (!_.isNil(dataVerification)) {
+    const dvItem = dataVerification[`${r}_${c}`];
     if (
       !_.isNil(dvItem) &&
       dvItem.prohibitInput &&
-      !dataVerificationCtrl.validateCellData(inputText, dvItem)
+      !validateCellData(ctx, dvItem, inputText)
     ) {
-      const failureText = dataVerificationCtrl.getFailureText(dvItem);
-      tooltip.info(failureText, "");
+      const failureText = getFailureText(ctx, dvItem);
+
       cancelNormalSelected(ctx);
+      ctx.warnDialog = failureText;
+
       return;
     }
   }
-  */
 
   let curv = flowdata[r][c];
 
@@ -696,7 +718,7 @@ export function updateCell(
 
   const isPrevInline = isInlineStringCell(curv);
   let isCurInline =
-    inputText?.slice(0, 1) !== "=" && inputHtml?.startsWith("<span");
+    inputText?.slice(0, 1) !== "=" && inputHtml?.substring(0, 5) === "<span";
 
   let isCopyVal = false;
   if (!isCurInline && inputText && inputText.length > 0) {
@@ -723,9 +745,7 @@ export function updateCell(
       curv = {};
     }
     curv ||= {};
-    delete curv.f;
-    delete curv.v;
-    delete curv.m;
+    const fontSize = curv.fs || 10;
 
     if (!curv.ct) {
       curv.ct = {};
@@ -733,11 +753,20 @@ export function updateCell(
     }
 
     curv.ct.t = "inlineStr";
-    curv.ct.s = convertSpanToShareString($input!.querySelectorAll("span"));
+    curv.ct.s = convertSpanToShareString(
+      $input!.querySelectorAll("span"),
+      curv
+    );
+    delete curv.fs;
+    delete curv.f;
+    delete curv.v;
+    delete curv.m;
+    curv.fs = fontSize;
     if (isCopyVal) {
       curv.ct.s = [
         {
           v: inputText,
+          fs: fontSize,
         },
       ];
     }
@@ -800,7 +829,7 @@ export function updateCell(
   if (_.isPlainObject(curv)) {
     if (!isCurInline) {
       if (_.isString(value) && value.slice(0, 1) === "=" && value.length > 1) {
-        const v = execfunction(ctx, value, r, c, undefined, true);
+        const v = execfunction(ctx, value, r, c, undefined, undefined, true);
         isRunExecFunction = false;
         curv = _.cloneDeep(d?.[r]?.[c] || {});
         [, curv.v, curv.f] = v;
@@ -830,7 +859,15 @@ export function updateCell(
           valueFunction.slice(0, 1) === "=" &&
           valueFunction.length > 1
         ) {
-          const v = execfunction(ctx, valueFunction, r, c, undefined, true);
+          const v = execfunction(
+            ctx,
+            valueFunction,
+            r,
+            c,
+            undefined,
+            undefined,
+            true
+          );
           isRunExecFunction = false;
           // get v/m/ct
 
@@ -870,7 +907,7 @@ export function updateCell(
         delete curv.f;
         delete curv.spl;
 
-        if (curv.qp === 1 && !`${value}`.startsWith("'")) {
+        if (curv.qp === 1 && `${value}`.substring(0, 1) !== "'") {
           // if quotePrefix is 1, cell is force string, cell clear quotePrefix when it is updated
           curv.qp = 0;
           if (curv.ct) {
@@ -883,7 +920,7 @@ export function updateCell(
     value = curv;
   } else {
     if (_.isString(value) && value.slice(0, 1) === "=" && value.length > 1) {
-      const v = execfunction(ctx, value, r, c, undefined, true);
+      const v = execfunction(ctx, value, r, c, undefined, undefined, true);
       isRunExecFunction = false;
       value = {
         v: v[1],
@@ -912,7 +949,15 @@ export function updateCell(
         valueFunction.slice(0, 1) === "=" &&
         valueFunction.length > 1
       ) {
-        const v = execfunction(ctx, valueFunction, r, c, undefined, true);
+        const v = execfunction(
+          ctx,
+          valueFunction,
+          r,
+          c,
+          undefined,
+          undefined,
+          true
+        );
         isRunExecFunction = false;
         // value = {
         //     "v": v[1],
@@ -963,32 +1008,35 @@ export function updateCell(
   }
   */
 
-  /*
-  if ((d[r][c].tb === "2" && d[r][c].v) || isInlineStringCell(d[r][c])) {
+  if ((curv?.tb === "2" && curv.v) || isInlineStringCell(d[r][c])) {
     // 自动换行
     const { defaultrowlen } = ctx;
 
-    const canvas = $("#luckysheetTableContent").get(0).getContext("2d");
+    // const canvas = $("#luckysheetTableContent").get(0).getContext("2d");
     // offlinecanvas.textBaseline = 'top'; //textBaseline以top计算
 
     // let fontset = luckysheetfontformat(d[r][c]);
     // offlinecanvas.font = fontset;
 
-    if (cfg.customHeight && cfg.customHeight[r] === 1) {
-    } else {
+    const cfg =
+      ctx.luckysheetfile[
+        getSheetIndex(ctx, ctx.currentSheetId as string) as number
+      ].config || {};
+    if (!(cfg.columnlen?.[c] && cfg.rowlen?.[r])) {
       // let currentRowLen = defaultrowlen;
       // if(!_.isNil(cfg["rowlen"][r])){
       //     currentRowLen = cfg["rowlen"][r];
       // }
 
-      const colLoc = colLocationByIndex(c, ctx.visibledatacolumn);
-      const cellWidth = colLoc[1] - colLoc[0] - 2;
+      const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
 
-      const textInfo = getCellTextInfo(d[r][c], canvas, ctx, {
-        r,
-        c,
-        cellWidth,
-      });
+      const textInfo = canvas
+        ? getCellTextInfo(d[r][c] as Cell, canvas, ctx, {
+            r,
+            c,
+            cellWidth,
+          })
+        : null;
 
       let currentRowLen = defaultrowlen;
       // console.log("rowlen", textInfo);
@@ -996,13 +1044,12 @@ export function updateCell(
         currentRowLen = textInfo.textHeightAll + 2;
       }
 
-      if (currentRowLen > defaultrowlen) {
+      if (currentRowLen > defaultrowlen && !cfg.customHeight?.[r]) {
+        if (_.isNil(cfg.rowlen)) cfg.rowlen = {};
         cfg.rowlen[r] = currentRowLen;
-        RowlChange = true;
       }
     }
   }
-  */
 
   // 动态数组
   /*
@@ -1031,8 +1078,10 @@ export function updateCell(
   */
 
   if (ctx.hooks.afterUpdateCell) {
+    const newValue = _.cloneDeep(flowdata[r][c]);
+    const { afterUpdateCell } = ctx.hooks;
     setTimeout(() => {
-      ctx.hooks.afterUpdateCell?.(r, c, oldValue, _.cloneDeep(flowdata[r][c]));
+      afterUpdateCell?.(r, c, oldValue, newValue);
     });
   }
 
@@ -1107,6 +1156,7 @@ export function getFlattenedRange(ctx: Context, range?: Range) {
   return result;
 }
 
+// 把选区范围数组转为string A1:A2
 export function getRangetxt(
   ctx: Context,
   sheetId: string,
@@ -1160,6 +1210,27 @@ export function getRangetxt(
   }:${indexToColumnChar(column1)}${row1 + 1}`;
 }
 
+// 把string A1:A2转为选区数组
+export function getRangeByTxt(ctx: Context, txt: string) {
+  let range = [];
+  if (txt.indexOf(",") !== -1) {
+    const arr = txt.split(",");
+    for (let i = 0; i < arr.length; i += 1) {
+      if (iscelldata(arr[i])) {
+        range.push(getcellrange(ctx, arr[i]));
+      } else {
+        range = [];
+        break;
+      }
+    }
+  } else {
+    if (iscelldata(txt)) {
+      range.push(getcellrange(ctx, txt));
+    }
+  }
+  return range;
+}
+
 export function isAllSelectedCellsInStatus(
   ctx: Context,
   attr: keyof Cell,
@@ -1169,6 +1240,7 @@ export function isAllSelectedCellsInStatus(
   if (!_.isEmpty(ctx.luckysheetCellUpdate)) {
     const w = window.getSelection();
     if (!w) return false;
+    if (w.rangeCount === 0) return false;
     const range = w.getRangeAt(0);
     if (range.collapsed === true) {
       return false;
@@ -1283,20 +1355,23 @@ export function getFontStyleByCell(
   return style;
 }
 
-export function getStyleByCell(d: CellMatrix, r: number, c: number) {
+export function getStyleByCell(
+  ctx: Context,
+  d: CellMatrix,
+  r: number,
+  c: number
+) {
   let style: any = {};
 
   // 交替颜色
   //   const af_compute = alternateformat.getComputeMap();
   //   const checksAF = alternateformat.checksAF(r, c, af_compute);
   const checksAF: any = [];
-
   // 条件格式
-  //   const cf_compute = conditionformat.getComputeMap();
-  //   const checksCF = conditionformat.checksCF(r, c, cf_compute);
-  const checksCF: any = {};
+  const cf_compute = getComputeMap(ctx);
+  const checksCF = checkCF(r, c, cf_compute);
 
-  const cell = d[r][c];
+  const cell = d?.[r]?.[c];
   if (!cell) return {};
 
   const isInline = isInlineStringCell(cell);
@@ -1343,14 +1418,12 @@ export function getInlineStringHTML(r: number, c: number, data: CellMatrix) {
     let value = "";
     for (let i = 0; i < strings.length; i += 1) {
       const strObj = strings[i];
-      let strObjValue = strObj.v;
-      if (strObjValue) {
-        strObjValue = escapeHTML(strObjValue);
+      if (strObj.v) {
         const style = getFontStyleByCell(strObj);
         const styleStr = _.map(style, (v, key) => {
           return `${_.kebabCase(key)}:${_.isNumber(v) ? `${v}px` : v};`;
         }).join("");
-        value += `<span class="luckysheet-input-span" index='${i}' style='${styleStr}'>${strObjValue}</span>`;
+        value += `<span class="luckysheet-input-span" index='${i}' style='${styleStr}'>${strObj.v}</span>`;
       }
     }
     return value;
@@ -1483,7 +1556,7 @@ export function rowlenByRange(
             2;
         }
 
-        const textInfo = getCellTextInfo(cell, canvas, {
+       const textInfo = getCellTextInfo(cell, canvas, {
           r,
           c,
           cellWidth,

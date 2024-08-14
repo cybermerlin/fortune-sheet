@@ -1638,7 +1638,7 @@ const make_ssf = function make_ssf(SSF) {
       throw new Error("cannot find right format for |" + fmt.join("|") + "|");
     // 这行代码弃用，有可能v会有"1"的情况出现，并且需要排查true，false，‘ ’这些值所以需要使用parseFloat(v).toString()去判断是不是Number类型
     // if (typeof v !== "number")
-    if(parseFloat(v).toString() == "NaN")
+    if (parseFloat(v).toString() == "NaN")
       return [4, fmt.length === 4 || lat > -1 ? fmt[fmt.length - 1] : "@"];
     switch (fmt.length) {
       case 1:
@@ -1717,15 +1717,15 @@ const make_ssf = function make_ssf(SSF) {
       if (vlength > 4) {
         if (vlength > 8) {
           var y = parseInt(v / 100000000); //亿
-          var w = parseInt(parseFloat(v)-(y * 100000000) / 10000); //万
-          var q = parseFloat(v)-(y * 100000000 + w * 10000); //千以后
+          var w = parseInt(parseFloat(v) - (y * 100000000) / 10000); //万
+          var q = parseFloat(v) - (y * 100000000 + w * 10000); //千以后
           if (acc != "") {
             q = numeral(q).format(acc); //处理精确度
           }
           v = y + "亿" + w + "万" + q;
         } else {
           var w = parseInt(v / 10000); //万
-          var q = parseFloat(v)-(w * 10000); //千以后
+          var q = parseFloat(v) - w * 10000; //千以后
           if (acc != "") {
             q = numeral(q).format(acc); //处理精确度
           }
@@ -1744,7 +1744,7 @@ const make_ssf = function make_ssf(SSF) {
         if (v.indexOf("亿") != -1 && v.indexOf("万") == -1) {
           //1亿/1亿111 => 1亿/1亿0111
           var afterYi = v.substring(v.indexOf("亿") + 1);
-          if (!afterYi.startsWith(".") && afterYi != "") {
+          if (afterYi.substring(0, 1) !== "." && afterYi != "") {
             switch ((parseInt(afterYi) + "").length) {
               case 1:
                 afterYi = "000" + afterYi;
@@ -1761,7 +1761,7 @@ const make_ssf = function make_ssf(SSF) {
         } else if (v.indexOf("亿") == -1 && v.indexOf("万") != -1) {
           //3万0011
           var afterWan = v.substring(v.indexOf("万") + 1);
-          if (!afterWan.startsWith(".") && afterWan != "") {
+          if (afterWan.substring(0, 1) !== "." && afterWan != "") {
             switch ((parseInt(afterWan) + "").length) {
               case 1:
                 afterWan = "000" + afterWan;
@@ -1796,7 +1796,7 @@ const make_ssf = function make_ssf(SSF) {
             afterYi +
             v.substring(v.indexOf("万"));
 
-          if (!afterWan.startsWith(".") && afterWan != "") {
+          if (afterWan.substring(0, 1) !== "." && afterWan != "") {
             switch ((parseInt(afterWan) + "").length) {
               case 1:
                 afterWan = "000" + afterWan;

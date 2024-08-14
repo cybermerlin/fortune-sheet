@@ -1,6 +1,6 @@
 import _ from "lodash";
 import { Context, getFlowdata } from "../context";
-import { getSheetIndex } from "../utils";
+import { getSheetIndex, isAllowEdit } from "../utils";
 import { mergeBorder } from "./cell";
 import { getcellrange, iscelldata } from "./formula";
 import { colLocation, rowLocation } from "./location";
@@ -66,13 +66,15 @@ export function saveHyperlink(
     cell.un = 1;
     cell.v = linkText || linkAddress;
     cell.m = linkText || linkAddress;
+    cell.hl = { r, c, id: ctx.currentSheetId };
     flowdata[r][c] = cell;
     ctx.linkCard = undefined;
   }
 }
 
 export function removeHyperlink(ctx: Context, r: number, c: number) {
-  if (ctx.allowEdit === false) return;
+  const allowEdit = isAllowEdit(ctx);
+  if (!allowEdit) return;
   const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
   const flowdata = getFlowdata(ctx);
   if (flowdata != null && sheetIndex != null) {

@@ -1,11 +1,11 @@
 import React, { useCallback, useRef, useState } from "react";
-import { ComponentMeta, ComponentStory } from "@storybook/react";
+import { Meta, StoryFn } from "@storybook/react";
 import { Workbook, WorkbookInstance } from "@fortune-sheet/react";
 import { Sheet } from "@fortune-sheet/core";
 
 export default {
   component: Workbook,
-} as ComponentMeta<typeof Workbook>;
+} as Meta<typeof Workbook>;
 
 const ApiExecContainer: React.FC<{
   onRun: () => any;
@@ -18,7 +18,7 @@ const ApiExecContainer: React.FC<{
         display: "flex",
         flexDirection: "column",
         width: "100%",
-        height: "100%",
+        height: "100vh",
       }}
     >
       <div style={{ flexShrink: 0, padding: 8 }}>
@@ -27,6 +27,7 @@ const ApiExecContainer: React.FC<{
           onClick={() => {
             setResult(onRun?.());
           }}
+          tabIndex={0}
         >
           Run
         </button>
@@ -43,7 +44,7 @@ const ApiExecContainer: React.FC<{
   );
 };
 
-export const GetCellValue: ComponentStory<typeof Workbook> = () => {
+export const GetCellValue: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -68,7 +69,7 @@ export const GetCellValue: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const SetCellValue: ComponentStory<typeof Workbook> = () => {
+export const SetCellValue: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -99,7 +100,7 @@ export const SetCellValue: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const ClearCell: ComponentStory<typeof Workbook> = () => {
+export const ClearCell: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -126,7 +127,7 @@ export const ClearCell: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const SetCellFormat: ComponentStory<typeof Workbook> = () => {
+export const SetCellFormat: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -152,7 +153,7 @@ export const SetCellFormat: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const AutoFillCell: ComponentStory<typeof Workbook> = () => {
+export const AutoFillCell: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -186,7 +187,7 @@ export const AutoFillCell: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const Freeze: ComponentStory<typeof Workbook> = () => {
+export const Freeze: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -208,7 +209,7 @@ export const Freeze: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const InsertRowCol: ComponentStory<typeof Workbook> = () => {
+export const InsertRowCol: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -236,7 +237,7 @@ export const InsertRowCol: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const DeleteRowCol: ComponentStory<typeof Workbook> = () => {
+export const DeleteRowCol: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -267,7 +268,7 @@ export const DeleteRowCol: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const GetRowHeight: ComponentStory<typeof Workbook> = () => {
+export const GetRowHeight: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -299,7 +300,7 @@ export const GetRowHeight: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const GetColumnWidth: ComponentStory<typeof Workbook> = () => {
+export const GetColumnWidth: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -331,7 +332,7 @@ export const GetColumnWidth: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const SetRowHeight: ComponentStory<typeof Workbook> = () => {
+export const SetRowHeight: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -362,7 +363,7 @@ export const SetRowHeight: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const SetColumnWidth: ComponentStory<typeof Workbook> = () => {
+export const SetColumnWidth: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -393,7 +394,7 @@ export const SetColumnWidth: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const GetSelection: ComponentStory<typeof Workbook> = () => {
+export const GetSelection: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -430,7 +431,7 @@ export const GetSelection: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const SetSelection: ComponentStory<typeof Workbook> = () => {
+export const SetSelection: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -466,7 +467,7 @@ export const SetSelection: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const MergeCells: ComponentStory<typeof Workbook> = () => {
+export const MergeCells: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -502,7 +503,7 @@ export const MergeCells: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const GetAllSheets: ComponentStory<typeof Workbook> = () => {
+export const GetAllSheets: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -540,7 +541,7 @@ export const GetAllSheets: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const AddSheet: ComponentStory<typeof Workbook> = () => {
+export const AddSheet: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -566,7 +567,7 @@ export const AddSheet: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const DeleteSheet: ComponentStory<typeof Workbook> = () => {
+export const DeleteSheet: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -600,7 +601,7 @@ export const DeleteSheet: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const UpdateSheet: ComponentStory<typeof Workbook> = () => {
+export const UpdateSheet: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -719,7 +720,7 @@ export const UpdateSheet: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const ActivateSheet: ComponentStory<typeof Workbook> = () => {
+export const ActivateSheet: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -753,7 +754,7 @@ export const ActivateSheet: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const SetSheetName: ComponentStory<typeof Workbook> = () => {
+export const SetSheetName: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -775,7 +776,7 @@ export const SetSheetName: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const SetSheetOrder: ComponentStory<typeof Workbook> = () => {
+export const SetSheetOrder: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     { id: "1", name: "Sheet1", order: 0 },
@@ -800,7 +801,7 @@ export const SetSheetOrder: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const Scroll: ComponentStory<typeof Workbook> = () => {
+export const Scroll: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -824,7 +825,7 @@ export const Scroll: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const Undo: ComponentStory<typeof Workbook> = () => {
+export const Undo: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
@@ -846,7 +847,7 @@ export const Undo: ComponentStory<typeof Workbook> = () => {
   );
 };
 
-export const Redo: ComponentStory<typeof Workbook> = () => {
+export const Redo: StoryFn<typeof Workbook> = () => {
   const ref = useRef<WorkbookInstance>(null);
   const [data, setData] = useState<Sheet[]>([
     {
